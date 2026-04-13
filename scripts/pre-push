@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# pre-push hook: Claude scope review
+# Verifica que lo que se sube corresponde al commit message declarado.
+# Veredictos: APROBADO (continúa), REVISAR (pregunta), BLOQUEADO (cancela).
+
+CLAUDE=/Users/josemaria/.local/bin/claude
+
+# ── Leer commits que se van a subir ──────────────────────────────────────────
+remote="$1"
+remote_url="$2"
+
+commits_to_push=""
+range=""
+while read local_ref local_sha remote_ref remote_sha; do
+  # Si la rama no existe en remoto aún, comparar con la base del repo
+  if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]]; then
+    base=$(git merge-base HEAD origin/HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD)
+    range="$base...$local_sha"
+  else
+    range="$remote_sha...$local_sha"
+  fi
+  commits_to_push+=$(git log "$range" --pretty=format:"- %h %s" --no-merges 2>/dev/null)
+  commits_to_push+=$'\n'
+done
+
+if [[ -z "$(echo "$commits_to_push" | tr -d '[:space:]')" ]]; then
+  exit 0  # Nada nuevo que subir
+fi
+
+# ── Recopilar diff y contexto ─────────────────────────────────────────────────
+files_changed=$(git diff --name-status "$range" 2>/dev/null | head -60)
+diff_content=$(git diff "$range" -- . \
+  ':(exclude)package-lock.json' \
+  ':(exclude)yarn.lock' \
+  ':(exclude)*.lock' \
+  2>/dev/null | head -c 10000)
+
+last_commit_msg=$(git log -1 --pretty=format:"%s%n%n%b")
+
+# ── Llamar a Claude ────────────────────────────────────────────────────────────
+echo ""
+echo "🤖  Claude revisando el push..."
+echo ""
+
+PROMPT="Eres un revisor de código técnico. Verifica que los cambios que se van a subir corresponden exactamente a lo declarado en el commit.
+
+## Tarea declarada (commit message)
+$last_commit_msg
+
+## Commits incluidos en el push
+$commits_to_push
+
+## Archivos modificados
+$files_changed
+
+## Diff del código
+\`\`\`diff
+$diff_content
+\`\`\`
+
+---
+
+Responde con este formato exacto:
+
+### ✅ Cambios que corresponden
+(lista breve)
+
+### ⚠️ Cambios no declarados o dudosos
+(lista breve, o «ninguno»)
+
+### ❌ Discrepancias o riesgos
+(lista breve, o «ninguno»)
+
+### 📋 Veredicto
+Escribe UNA de estas tres palabras exactas en la última línea, sola, sin nada más:
+APROBADO
+REVISAR
+BLOQUEADO
+
+Criterio:
+- APROBADO: los cambios son fieles a la tarea
+- REVISAR: hay cambios menores no declarados pero no críticos
+- BLOQUEADO: cambios fuera de scope o discrepancias graves"
+
+report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null)
+
+if [[ $? -ne 0 || -z "$report" ]]; then
+  echo "⚠️  No se pudo contactar con Claude. ¿Continuar el push? [s/N]"
+  read -r answer < /dev/tty
+  [[ "$answer" =~ ^[sS]$ ]] && exit 0 || exit 1
+fi
+
+# ── Mostrar informe ────────────────────────────────────────────────────────────
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "$report"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# ── Parsear veredicto (última línea no vacía) ─────────────────────────────────
+verdict=$(echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1)
+
+case "$verdict" in
+  APROBADO)
+    echo "✅  APROBADO — Push continuando."
+    exit 0
+    ;;
+  REVISAR)
+    echo "⚠️  REVISAR — Hay cambios menores no declarados."
+    echo "   ¿Continuar el push? [s/N]"
+    read -r answer < /dev/tty
+    [[ "$answer" =~ ^[sS]$ ]] && exit 0 || exit 1
+    ;;
+  BLOQUEADO)
+    echo "❌  BLOQUEADO — Push cancelado."
+    echo "   Usa 'git push --no-verify' para saltarte la revisión."
+    exit 1
+    ;;
+  *)
+    echo "⚠️  No se encontró veredicto claro. ¿Continuar el push? [s/N]"
+    read -r answer < /dev/tty
+    [[ "$answer" =~ ^[sS]$ ]] && exit 0 || exit 1
+    ;;
+esac
