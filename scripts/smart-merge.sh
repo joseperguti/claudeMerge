@@ -45,7 +45,9 @@ echo "📋  Leyendo contexto de la tarea desde '$BRANCH'..."
 
 # Commits de la rama que no están en la rama actual
 TASK_COMMITS=$(git log "$CURRENT_BRANCH".."$BRANCH" --pretty=format:"- %h %s%n  %b" --no-merges 2>/dev/null)
-TASK_DESCRIPTION=$(git log "$CURRENT_BRANCH".."$BRANCH" -1 --pretty=format:"%s%n%n%b" 2>/dev/null)
+# Tarea = primer commit de la rama (el que describe la intención original)
+# Los commits posteriores son refinamientos/fixes de esa misma tarea
+TASK_DESCRIPTION=$(git log "$CURRENT_BRANCH".."$BRANCH" --reverse --pretty=format:"%s%n%n%b" --no-merges 2>/dev/null | head -20)
 FILES_IN_BRANCH=$(git diff --name-only "$CURRENT_BRANCH"..."$BRANCH" 2>/dev/null)
 DIFF_BRANCH=$(capture "git diff '$CURRENT_BRANCH'...'$BRANCH' -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock'")
 
