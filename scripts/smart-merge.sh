@@ -14,6 +14,8 @@
 #      no introdujo cambios fuera de scope antes de confirmarlo
 
 set -euo pipefail
+# Desactivar pipefail puntualmente en capturas con head/tail para evitar SIGPIPE
+capture() { { eval "$1" || true; } 2>/dev/null | head -c "${2:-12000}"; }
 
 CLAUDE=/Users/josemaria/.local/bin/claude
 BRANCH="${1:-}"
@@ -45,9 +47,7 @@ echo "📋  Leyendo contexto de la tarea desde '$BRANCH'..."
 TASK_COMMITS=$(git log "$CURRENT_BRANCH".."$BRANCH" --pretty=format:"- %h %s%n  %b" --no-merges 2>/dev/null)
 TASK_DESCRIPTION=$(git log "$CURRENT_BRANCH".."$BRANCH" -1 --pretty=format:"%s%n%n%b" 2>/dev/null)
 FILES_IN_BRANCH=$(git diff --name-only "$CURRENT_BRANCH"..."$BRANCH" 2>/dev/null)
-DIFF_BRANCH=$(git diff "$CURRENT_BRANCH"..."$BRANCH" -- . \
-  ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock' \
-  2>/dev/null | head -c 12000)
+DIFF_BRANCH=$(capture "git diff '$CURRENT_BRANCH'...'$BRANCH' -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock'")
 
 if [[ -z "$TASK_DESCRIPTION" ]]; then
   echo "⚠️  No se encontraron commits nuevos en '$BRANCH' respecto a '$CURRENT_BRANCH'."
@@ -108,9 +108,7 @@ if [[ $MERGE_EXIT -eq 0 && -z "$CONFLICTS" ]]; then
   echo "✅  Merge sin conflictos. Verificando scope con Claude..."
   echo ""
 
-  STAGED_DIFF=$(git diff --cached -- . \
-    ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock' \
-    2>/dev/null | head -c 10000)
+  STAGED_DIFF=$(capture "git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock'" 10000)
 
   PROMPT="El merge se aplicó sin conflictos. Verifica que los cambios son exactamente lo declarado.
 
@@ -241,9 +239,7 @@ $conflict_content
 
   # Verificación final del resultado completo
   echo "🔍  Verificación final del merge resuelto..."
-  FINAL_DIFF=$(git diff --cached -- . \
-    ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock' \
-    2>/dev/null | head -c 10000)
+  FINAL_DIFF=$(capture "git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock'" 10000)
 
   PROMPT="Verificación final post-resolución de conflictos.
 

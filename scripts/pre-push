@@ -28,12 +28,11 @@ if [[ -z "$(echo "$commits_to_push" | tr -d '[:space:]')" ]]; then
 fi
 
 # ── Recopilar diff y contexto ─────────────────────────────────────────────────
-files_changed=$(git diff --name-status "$range" 2>/dev/null | head -60)
-diff_content=$(git diff "$range" -- . \
+files_changed=$({ git diff --name-status "$range" || true; } 2>/dev/null | head -60)
+diff_content=$({ git diff "$range" -- . \
   ':(exclude)package-lock.json' \
   ':(exclude)yarn.lock' \
-  ':(exclude)*.lock' \
-  2>/dev/null | head -c 10000)
+  ':(exclude)*.lock' || true; } 2>/dev/null | head -c 10000)
 
 last_commit_msg=$(git log -1 --pretty=format:"%s%n%n%b")
 
