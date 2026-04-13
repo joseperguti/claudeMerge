@@ -5,19 +5,18 @@
 #   bash scripts/smart-merge-all.sh
 #   bash scripts/smart-merge-all.sh main
 #   bash scripts/smart-merge-all.sh main --dry-run
-#   bash scripts/smart-merge-all.sh main --task-file scripts/backlog-task.md --require-checks
+#   bash scripts/smart-merge-all.sh main --require-checks
 #   bash scripts/smart-merge-all.sh main feature/a feature/b
 
 set -euo pipefail
 
 usage() {
-  echo "Uso: bash scripts/smart-merge-all.sh [rama-base] [--dry-run] [--task-file <ruta>|--task-file=<ruta>] [--require-checks] [--check-cmd <cmd>] [rama1 rama2 ...]"
+  echo "Uso: bash scripts/smart-merge-all.sh [rama-base] [--dry-run] [--require-checks] [--check-cmd <cmd>] [rama1 rama2 ...]"
 }
 
 BASE_BRANCH="main"
 BASE_SET=false
 DRY_RUN=false
-TASK_FILE=""
 REQUIRE_CHECKS=false
 CHECK_CMD=""
 declare -a BRANCHES=()
@@ -40,17 +39,6 @@ while [[ $# -gt 0 ]]; do
       CHECK_CMD="$2"
       EXTRA_ARGS+=("--check-cmd" "$2")
       shift 2
-      ;;
-    --task-file)
-      [[ $# -lt 2 ]] && echo "❌  Falta ruta para --task-file" && exit 1
-      TASK_FILE="$2"
-      EXTRA_ARGS+=("--task-file" "$2")
-      shift 2
-      ;;
-    --task-file=*)
-      TASK_FILE="${1#*=}"
-      EXTRA_ARGS+=("--task-file=$TASK_FILE")
-      shift
       ;;
     -h|--help)
       usage
@@ -75,11 +63,6 @@ done
 
 if ! git rev-parse --verify "$BASE_BRANCH" >/dev/null 2>&1; then
   echo "❌  Rama base '$BASE_BRANCH' no existe."
-  exit 1
-fi
-
-if [[ -n "$TASK_FILE" && ! -f "$TASK_FILE" ]]; then
-  echo "❌  --task-file no existe: $TASK_FILE"
   exit 1
 fi
 
@@ -116,7 +99,6 @@ echo "📋  Ramas candidatas:"
 for branch in "${BRANCHES[@]}"; do
   echo "   • $branch"
 done
-[[ -n "$TASK_FILE" ]] && echo "📋  Contexto backlog: $TASK_FILE"
 [[ "$REQUIRE_CHECKS" == true ]] && echo "📋  Checks obligatorios: ${CHECK_CMD:-SMART_MERGE_CHECK_CMD o default}"
 echo ""
 

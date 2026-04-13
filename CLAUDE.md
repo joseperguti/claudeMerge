@@ -59,3 +59,49 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/dashboard/'
 LOGOUT_REDIRECT_URL = '/login/'
 ```
+
+## Merge Guardrails (Claude-assisted)
+
+This repo uses local guardrails to verify merge scope before integrating branches.
+
+### Components
+
+- `scripts/pre-push`: git hook that asks Claude to compare commit intent vs pushed diff.
+- `scripts/smart-merge.sh`: merge assistant for one branch (`--dry-run`, `--auto`, conflict resolution, scope validation).
+- `scripts/smart-merge-all.sh`: orchestrates multiple branch merges against a base branch (`main` by default).
+
+Install hook:
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+### Recommended merge flow
+
+1. Pre-analyze candidate branches:
+
+```bash
+bash scripts/smart-merge-all.sh main --dry-run feature/redesign-landing-templates feature/redesign-landing-v2
+```
+
+2. Execute automatic merges (strict mode):
+
+```bash
+bash scripts/smart-merge-all.sh main feature/redesign-landing-templates feature/redesign-landing-v2
+```
+
+3. Optional technical checks before merge commit:
+
+```bash
+bash scripts/smart-merge-all.sh main --require-checks
+```
+
+Behavior in `--auto`:
+- `APROBADO` => merge continues.
+- `REVISAR` / `BLOQUEADO` / unclear verdict => merge is aborted.
+
+### Operational limits
+
+- Requires Claude CLI login and available credits.
+- If Claude is unavailable (login/limit), semantic validation cannot run.
+- `--require-checks` runs technical checks before final merge commit (default command in `smart-merge.sh`).

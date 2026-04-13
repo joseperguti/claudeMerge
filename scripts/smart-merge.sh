@@ -5,14 +5,11 @@
 #   bash scripts/smart-merge.sh <rama>
 #   bash scripts/smart-merge.sh <rama> --dry-run
 #   bash scripts/smart-merge.sh <rama> --auto
-#   bash scripts/smart-merge.sh <rama> --task-file scripts/backlog-task.md
 #   bash scripts/smart-merge.sh <rama> --require-checks
 #
 # Notas:
-#   - --task-file es opcional. Si se indica, se usa como fuente primaria
-#     de alcance funcional (backlog).
-#   - --require-checks ejecuta verificaciones técnicas antes de confirmar merge.
 #   - En --auto solo mergea con veredicto APROBADO.
+#   - --require-checks ejecuta verificaciones técnicas antes de confirmar merge.
 
 set -euo pipefail
 
@@ -20,7 +17,7 @@ capture() { { eval "$1" || true; } 2>/dev/null | head -c "${2:-12000}"; }
 extract_verdict() { { echo "$1" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1; } || true; }
 
 usage() {
-  echo "Uso: bash scripts/smart-merge.sh <rama> [--dry-run] [--auto] [--task-file <ruta>|--task-file=<ruta>] [--require-checks] [--check-cmd <cmd>]"
+  echo "Uso: bash scripts/smart-merge.sh <rama> [--dry-run] [--auto] [--require-checks] [--check-cmd <cmd>]"
 }
 
 run_checks() {
@@ -45,7 +42,6 @@ CLAUDE=/Users/josemaria/.local/bin/claude
 BRANCH=""
 DRY_RUN=false
 AUTO_MODE=false
-TASK_FILE="${SMART_MERGE_TASK_FILE:-}"
 REQUIRE_CHECKS=false
 CHECK_CMD="${SMART_MERGE_CHECK_CMD:-python manage.py check && python manage.py test}"
 
@@ -67,15 +63,6 @@ while [[ $# -gt 0 ]]; do
       [[ $# -lt 2 ]] && echo "❌  Falta valor para --check-cmd" && exit 1
       CHECK_CMD="$2"
       shift 2
-      ;;
-    --task-file)
-      [[ $# -lt 2 ]] && echo "❌  Falta ruta para --task-file" && exit 1
-      TASK_FILE="$2"
-      shift 2
-      ;;
-    --task-file=*)
-      TASK_FILE="${1#*=}"
-      shift
       ;;
     -h|--help)
       usage
@@ -114,11 +101,6 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-if [[ -n "$TASK_FILE" && ! -f "$TASK_FILE" ]]; then
-  echo "❌  --task-file no existe: $TASK_FILE"
-  exit 1
-fi
-
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 echo ""
@@ -134,19 +116,7 @@ if [[ -z "$TASK_DESCRIPTION" ]]; then
   exit 0
 fi
 
-TASK_CONTEXT="No disponible"
-TASK_SOURCE="commit"
-if [[ -n "$TASK_FILE" ]]; then
-  TASK_CONTEXT=$(head -c 6000 "$TASK_FILE" || true)
-  if [[ -n "${TASK_CONTEXT//[[:space:]]/}" ]]; then
-    TASK_SOURCE="backlog+commit"
-  else
-    TASK_CONTEXT="No disponible"
-  fi
-fi
-
 echo "   Tarea base: $TASK_DESCRIPTION" | head -2
-[[ "$TASK_SOURCE" == "backlog+commit" ]] && echo "   Backlog externo: $TASK_FILE"
 echo ""
 
 if [[ "$DRY_RUN" == true ]]; then
@@ -158,13 +128,10 @@ if [[ "$DRY_RUN" == true ]]; then
 ## Rama a mergear: $BRANCH → $CURRENT_BRANCH
 
 ## Fuente de verdad
-$TASK_SOURCE
+commit
 
 ## Tarea declarada (commit)
 $TASK_DESCRIPTION
-
-## Contexto de backlog (opcional)
-$TASK_CONTEXT
 
 ## Commits incluidos
 $TASK_COMMITS
@@ -220,13 +187,10 @@ if [[ $MERGE_EXIT -eq 0 && -z "$CONFLICTS" ]]; then
   PROMPT="El merge se aplicó sin conflictos. Verifica que los cambios son exactamente lo declarado.
 
 ## Fuente de verdad
-$TASK_SOURCE
+commit
 
 ## Tarea declarada (commit)
 $TASK_DESCRIPTION
-
-## Contexto de backlog (opcional)
-$TASK_CONTEXT
 
 ## Diff resultante del merge
 \`\`\`diff
@@ -324,13 +288,10 @@ if [[ -n "$CONFLICTS" ]]; then
     PROMPT="Eres un experto en resolución de conflictos git. Tu trabajo es resolver este conflicto manteniendo SOLAMENTE los cambios que corresponden a la tarea declarada.
 
 ## Fuente de verdad
-$TASK_SOURCE
+commit
 
 ## Tarea declarada (commit)
 $TASK_DESCRIPTION
-
-## Contexto de backlog (opcional)
-$TASK_CONTEXT
 
 ## Archivo con conflictos: $file
 \`\`\`
@@ -382,13 +343,10 @@ $conflict_content
   PROMPT="Verificación final post-resolución de conflictos.
 
 ## Fuente de verdad
-$TASK_SOURCE
+commit
 
 ## Tarea declarada (commit)
 $TASK_DESCRIPTION
-
-## Contexto de backlog (opcional)
-$TASK_CONTEXT
 
 ## Resultado final del merge (lo que se va a commitear)
 \`\`\`diff

@@ -1,0 +1,114 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  claude-review:
+    name: Claude · Revisión de cambios
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Recopilar contexto de la PR
+        id: context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Título y descripción de la PR
+          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q '.title')
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q '.body // "Sin descripción"')
+
+          # Commits de la rama (no en main)
+          COMMITS=$(git log origin/main..HEAD --pretty=format:"- %h %s%n  %b" --no-merges)
+
+          # Archivos modificados con tipo de cambio
+          FILES_CHANGED=$(git diff --name-status origin/main...HEAD)
+
+          # Diff completo (limitado para no exceder límites)
+          DIFF=$(git diff origin/main...HEAD -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' | head -c 12000)
+
+          # Exportar como variables de entorno multilinea
+          {
+            echo "PR_TITLE<<EOF"
+            echo "$PR_TITLE"
+            echo "EOF"
+            echo "PR_BODY<<EOF"
+            echo "$PR_BODY"
+            echo "EOF"
+            echo "COMMITS<<EOF"
+            echo "$COMMITS"
+            echo "EOF"
+            echo "FILES_CHANGED<<EOF"
+            echo "$FILES_CHANGED"
+            echo "EOF"
+            echo "DIFF<<EOF"
+            echo "$DIFF"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Claude · Analizar PR
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            Eres un revisor de código técnico. Tu misión es verificar que los cambios de esta PR son exactamente lo que se declara, ni más ni menos.
+
+            ## PR: ${{ env.PR_TITLE }}
+
+            ### Descripción de la tarea / backlog
+            ${{ env.PR_BODY }}
+
+            ### Commits incluidos
+            ${{ env.COMMITS }}
+
+            ### Archivos modificados
+            ${{ env.FILES_CHANGED }}
+
+            ### Diff del código
+            ```diff
+            ${{ env.DIFF }}
+            ```
+
+            ---
+
+            ## Tu análisis debe responder estas preguntas:
+
+            **1. ¿El código cambiado corresponde a lo descrito?**
+            Compara cada cambio real con lo que dice la descripción de la tarea. ¿Hay algo implementado que no se menciona? ¿Falta algo que sí se menciona?
+
+            **2. ¿Hay cambios fuera del scope declarado?**
+            Identifica archivos o lógica modificada que no tenga relación directa con la tarea. Considera especialmente: configuración, dependencias, estilos globales, utilidades compartidas.
+
+            **3. ¿Hay efectos secundarios potenciales?**
+            ¿Algún cambio podría afectar a otras partes del sistema no mencionadas?
+
+            ---
+
+            ## Formato de respuesta
+
+            ### ✅ Cambios que corresponden a la descripción
+            Lista lo que está bien alineado.
+
+            ### ⚠️ Cambios no declarados o dudosos
+            Lista cambios presentes en el código que no aparecen en la descripción de la tarea.
+
+            ### ❌ Discrepancias o riesgos
+            Cambios que contradicen la descripción o podrían romper otras cosas.
+
+            ### 📋 Veredicto
+            **APROBADO** — Los cambios son fieles a la tarea descrita.
+            **REVISAR** — Hay cambios menores no declarados, pero no críticos.
+            **BLOQUEADO** — Hay cambios significativos fuera del scope o discrepancias graves.
+
+            Sé directo y conciso. No repitas el diff completo.
