@@ -3,122 +3,237 @@
 {% block title %}Iniciar Sesion{% endblock %}
 
 {% block extra_styles %}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { background: #0a0a0a; }
+
 .auth-wrapper {
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+/* ── canvas partículas ── */
+#particleCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ── spotlight cursor ── */
+#spotlight {
+    position: fixed;
+    width: 480px; height: 480px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(102,126,234,.09) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
+    transform: translate(-50%, -50%);
+    transition: left .08s, top .08s;
 }
 
 .auth-card {
-    background: white;
-    border-radius: 16px;
-    padding: 48px 40px;
+    position: relative;
+    z-index: 10;
+    background: rgba(20,20,28,0.85);
+    backdrop-filter: blur(32px);
+    -webkit-backdrop-filter: blur(32px);
+    border: 1px solid rgba(102,126,234,0.25);
+    border-radius: 20px;
+    padding: 52px 44px;
     width: 100%;
     max-width: 420px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    box-shadow: 0 0 80px rgba(102,126,234,0.08), inset 0 1px 0 rgba(255,255,255,0.06);
+    opacity: 0;
+    transform: scale(0.94) translateY(20px);
+    transition: opacity .6s cubic-bezier(.22,1,.36,1), transform .6s cubic-bezier(.22,1,.36,1);
+}
+.auth-card.visible { opacity: 1; transform: scale(1) translateY(0); }
+
+/* glow border animado */
+.auth-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 21px;
+    background: linear-gradient(135deg, rgba(102,126,234,.4), rgba(118,75,162,.4), rgba(102,126,234,.1));
+    background-size: 300% 300%;
+    animation: borderFlow 4s ease infinite;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity .6s;
+}
+.auth-card.visible::before { opacity: 1; }
+@keyframes borderFlow {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
+/* ── SVG logo glitch ── */
+.auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+
+/* ── título con glitch on error ── */
 .auth-card h1 {
-    text-align: center;
-    font-size: 28px;
-    font-weight: 700;
-    color: #333;
-    margin-bottom: 8px;
+    text-align: center; font-size: 26px; font-weight: 700;
+    color: #fff; letter-spacing: -.5px; margin-bottom: 6px;
+    font-family: -apple-system, sans-serif;
+    position: relative;
+}
+.auth-card h1.glitch {
+    animation: glitch .4s steps(1) both;
+}
+@keyframes glitch {
+    0%  { text-shadow: none; transform: none; }
+    15% { text-shadow: -3px 0 #ff453a, 3px 0 #667eea; transform: skewX(-4deg); }
+    30% { text-shadow: 3px 0 #ff453a, -3px 0 #667eea; transform: skewX(4deg); }
+    45% { text-shadow: -2px 0 #ff453a; transform: skewX(-2deg); }
+    60% { text-shadow: 2px 0 #667eea; transform: none; }
+    100%{ text-shadow: none; transform: none; }
 }
 
 .auth-card .subtitle {
-    text-align: center;
-    color: #888;
-    font-size: 14px;
-    margin-bottom: 32px;
+    text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 36px;
+    font-family: -apple-system, sans-serif; min-height: 20px;
 }
 
-.form-group {
-    margin-bottom: 20px;
-}
-
+/* ── campos neon ── */
+.form-group { margin-bottom: 20px; position: relative; }
 .form-group label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    color: #555;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    display: block; font-size: 12px; font-weight: 600;
+    color: #6b7280; margin-bottom: 8px;
+    text-transform: uppercase; letter-spacing: .8px;
+    font-family: -apple-system, sans-serif;
+    transition: color .2s;
 }
+.form-group:focus-within label { color: #667eea; }
 
 .form-group input {
-    width: 100%;
-    padding: 12px 16px;
-    border: 2px solid #e8e8e8;
-    border-radius: 8px;
-    font-size: 15px;
-    transition: border-color 0.2s;
-    outline: none;
+    width: 100%; padding: 13px 16px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 10px; font-size: 15px;
+    color: #fff; outline: none;
+    font-family: -apple-system, sans-serif;
+    transition: border-color .25s, box-shadow .25s, background .25s;
 }
-
+.form-group input::placeholder { color: rgba(255,255,255,.2); }
 .form-group input:focus {
     border-color: #667eea;
+    background: rgba(102,126,234,.07);
+    box-shadow: 0 0 0 3px rgba(102,126,234,.15), 0 0 20px rgba(102,126,234,.1);
 }
 
-.btn-primary {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
+/* scan line on focus */
+.form-group .scan-line {
+    position: absolute; bottom: 0; left: 0;
+    height: 2px; width: 0; border-radius: 2px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    transition: width .35s cubic-bezier(.22,1,.36,1);
+    pointer-events: none;
+}
+.form-group input:focus ~ .scan-line { width: 100%; }
+
+.errorlist { list-style: none; color: #ff453a; font-size: 12px; margin-top: 5px; font-family: -apple-system, sans-serif; }
+
+/* ── botón magnético ── */
+.btn-magnetic-wrap {
+    position: relative;
+    display: block;
     margin-top: 8px;
-    transition: opacity 0.2s, transform 0.1s;
+    --mx: 0px; --my: 0px;
 }
-
+.btn-primary {
+    width: 100%; padding: 14px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    background-size: 200% 200%;
+    color: white; border: none; border-radius: 10px;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+    font-family: -apple-system, sans-serif;
+    position: relative; overflow: hidden;
+    transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .2s;
+    transform: translate(var(--mx), var(--my));
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+}
 .btn-primary:hover {
-    opacity: 0.9;
-    transform: translateY(-1px);
+    box-shadow: 0 8px 32px rgba(102,126,234,.45);
+    animation: gradientFlow 2s ease infinite;
+}
+@keyframes gradientFlow {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+.btn-primary:active { transform: scale(0.97); }
+
+/* spinner */
+.btn-primary .spinner { display:none; width:18px; height:18px; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-primary.loading .btn-label { opacity: 0; }
+.btn-primary.loading .spinner { display: block; }
+
+/* particle burst on click */
+.burst-particle {
+    position: fixed; width: 6px; height: 6px;
+    border-radius: 50%; pointer-events: none;
+    background: #667eea; z-index: 9999;
+    animation: burst .6s ease-out forwards;
+}
+@keyframes burst {
+    to { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
 }
 
 .auth-footer {
-    text-align: center;
-    margin-top: 24px;
-    font-size: 14px;
-    color: #888;
+    text-align: center; margin-top: 24px;
+    font-size: 14px; color: #6b7280; font-family: -apple-system, sans-serif;
 }
-
-.auth-footer a {
-    color: #667eea;
-    text-decoration: none;
-    font-weight: 600;
-}
-
-.auth-footer a:hover {
-    text-decoration: underline;
-}
-
-.errorlist {
-    list-style: none;
-    color: #e74c3c;
-    font-size: 12px;
-    margin-top: 4px;
-}
+.auth-footer a { color: #667eea; text-decoration: none; font-weight: 600; }
+.auth-footer a:hover { text-decoration: underline; }
 {% endblock %}
 
 {% block content %}
 <div class="auth-wrapper">
-    <div class="auth-card">
-        <h1>Bienvenido</h1>
-        <p class="subtitle">Inicia sesion para continuar</p>
+    <canvas id="particleCanvas"></canvas>
+    <div id="spotlight"></div>
 
-        <form method="post">
+    <div class="auth-card" id="authCard">
+
+        <!-- Logo SVG con efecto de scan -->
+        <div class="auth-logo">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none" id="logoSvg">
+                <rect x="1" y="1" width="54" height="54" rx="14"
+                    stroke="url(#logoGrad)" stroke-width="1.5" fill="rgba(102,126,234,.08)"/>
+                <defs>
+                    <linearGradient id="logoGrad" x1="0" y1="0" x2="56" y2="56">
+                        <stop offset="0%" stop-color="#667eea"/>
+                        <stop offset="100%" stop-color="#764ba2"/>
+                    </linearGradient>
+                </defs>
+                <!-- scan line inside logo -->
+                <rect id="logoScan" x="8" y="50" width="40" height="2" rx="1"
+                    fill="url(#logoGrad)" opacity=".8"/>
+                <!-- letras M -->
+                <path d="M16 38V20l12 10 12-10v18" stroke="url(#logoGrad)"
+                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                    fill="none" stroke-dasharray="60" stroke-dashoffset="60" id="logoPath"/>
+            </svg>
+        </div>
+
+        <h1 id="cardTitle">Bienvenido</h1>
+        <p class="subtitle" id="cardSubtitle"></p>
+
+        <form method="post" id="loginForm" novalidate>
             {% csrf_token %}
             {% for field in form %}
             <div class="form-group">
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
+                <div class="scan-line"></div>
                 {% if field.errors %}
                 <ul class="errorlist">
                     {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
@@ -126,7 +241,16 @@
                 {% endif %}
             </div>
             {% endfor %}
-            <button type="submit" class="btn-primary">Entrar</button>
+
+            <div class="btn-magnetic-wrap" id="magnetWrap">
+                <button type="submit" class="btn-primary" id="submitBtn">
+                    <span class="btn-label">Entrar</span>
+                    <svg class="spinner" viewBox="0 0 18 18" fill="none">
+                        <circle cx="9" cy="9" r="7" stroke="rgba(255,255,255,.25)" stroke-width="2"/>
+                        <path d="M9 2a7 7 0 0 1 7 7" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
         </form>
 
         <div class="auth-footer">
@@ -134,4 +258,153 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+
+    /* ══ 1. ENTRADA DE CARD ══ */
+    const card = document.getElementById('authCard');
+    requestAnimationFrame(() => setTimeout(() => card.classList.add('visible'), 60));
+
+    /* ══ 2. TYPEWRITER en subtítulo ══ */
+    const sub  = document.getElementById('cardSubtitle');
+    const text = 'Inicia sesion para continuar';
+    let ti = 0;
+    setTimeout(function type() {
+        sub.textContent = text.slice(0, ti++) + (ti <= text.length ? '|' : '');
+        if (ti <= text.length + 1) setTimeout(type, 45);
+        else sub.textContent = text;
+    }, 500);
+
+    /* ══ 3. LOGO PATH DRAW ══ */
+    const lp   = document.getElementById('logoPath');
+    const scan = document.getElementById('logoScan');
+    setTimeout(() => {
+        lp.style.transition = 'stroke-dashoffset .9s cubic-bezier(.4,0,.2,1)';
+        lp.style.strokeDashoffset = '0';
+        // scan line sube
+        let sy = 50;
+        const scanAnim = setInterval(() => {
+            sy -= 2.5;
+            scan.setAttribute('y', sy);
+            if (sy <= 8) { clearInterval(scanAnim); scan.setAttribute('opacity','0'); }
+        }, 20);
+    }, 300);
+
+    /* ══ 4. PARTICLE NETWORK ══ */
+    const canvas = document.getElementById('particleCanvas');
+    const ctx    = canvas.getContext('2d');
+    let W, H, particles = [], mouse = { x: -9999, y: -9999 };
+
+    function resize() {
+        W = canvas.width  = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function mkParticle() {
+        return {
+            x: Math.random() * W, y: Math.random() * H,
+            vx: (Math.random() - .5) * .5, vy: (Math.random() - .5) * .5,
+            r: Math.random() * 1.8 + .8,
+            op: Math.random() * .5 + .2,
+        };
+    }
+    for (let i = 0; i < 90; i++) particles.push(mkParticle());
+
+    function drawParticles() {
+        ctx.clearRect(0, 0, W, H);
+        particles.forEach(p => {
+            p.x += p.vx; p.y += p.vy;
+            if (p.x < 0 || p.x > W) p.vx *= -1;
+            if (p.y < 0 || p.y > H) p.vy *= -1;
+
+            // mouse repulsion
+            const dx = p.x - mouse.x, dy = p.y - mouse.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 100) { p.x += dx/dist * 1.2; p.y += dy/dist * 1.2; }
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+            ctx.fillStyle = `rgba(102,126,234,${p.op})`;
+            ctx.fill();
+        });
+        // connections
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i+1; j < particles.length; j++) {
+                const dx = particles[i].x - particles[j].x;
+                const dy = particles[i].y - particles[j].y;
+                const d  = Math.sqrt(dx*dx + dy*dy);
+                if (d < 120) {
+                    ctx.beginPath();
+                    ctx.moveTo(particles[i].x, particles[i].y);
+                    ctx.lineTo(particles[j].x, particles[j].y);
+                    ctx.strokeStyle = `rgba(102,126,234,${.15 * (1 - d/120)})`;
+                    ctx.lineWidth = .6;
+                    ctx.stroke();
+                }
+            }
+        }
+        requestAnimationFrame(drawParticles);
+    }
+    drawParticles();
+
+    /* ══ 5. SPOTLIGHT CURSOR ══ */
+    const spotlight = document.getElementById('spotlight');
+    window.addEventListener('mousemove', e => {
+        spotlight.style.left = e.clientX + 'px';
+        spotlight.style.top  = e.clientY + 'px';
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+    });
+
+    /* ══ 6. BOTÓN MAGNÉTICO ══ */
+    const wrap = document.getElementById('magnetWrap');
+    const btn  = document.getElementById('submitBtn');
+    wrap.addEventListener('mousemove', function (e) {
+        const r  = this.getBoundingClientRect();
+        const cx = r.left + r.width  / 2;
+        const cy = r.top  + r.height / 2;
+        const dx = (e.clientX - cx) * .25;
+        const dy = (e.clientY - cy) * .25;
+        btn.style.setProperty('--mx', dx + 'px');
+        btn.style.setProperty('--my', dy + 'px');
+        btn.style.transform = `translate(${dx}px, ${dy}px)`;
+    });
+    wrap.addEventListener('mouseleave', function () {
+        btn.style.transform = 'translate(0,0)';
+        btn.style.transition = 'transform .4s cubic-bezier(.22,1,.36,1)';
+    });
+
+    /* ══ 7. BURST DE PARTÍCULAS al hacer clic ══ */
+    btn.addEventListener('click', function (e) {
+        const colors = ['#667eea','#764ba2','#a855f7','#f093fb'];
+        for (let i = 0; i < 14; i++) {
+            const bp = document.createElement('div');
+            bp.className = 'burst-particle';
+            const angle = (Math.PI * 2 * i) / 14;
+            const dist  = Math.random() * 80 + 40;
+            bp.style.left = e.clientX + 'px';
+            bp.style.top  = e.clientY + 'px';
+            bp.style.background = colors[Math.floor(Math.random()*colors.length)];
+            bp.style.setProperty('--tx', Math.cos(angle)*dist + 'px');
+            bp.style.setProperty('--ty', Math.sin(angle)*dist + 'px');
+            document.body.appendChild(bp);
+            bp.addEventListener('animationend', () => bp.remove());
+        }
+    });
+
+    /* ══ 8. GLITCH en error + loading ══ */
+    const form  = document.getElementById('loginForm');
+    const title = document.getElementById('cardTitle');
+    form.addEventListener('submit', () => btn.classList.add('loading'));
+
+    {% if form.errors %}
+    title.classList.add('glitch');
+    title.addEventListener('animationend', () => title.classList.remove('glitch'), { once: true });
+    {% endif %}
+
+})();
+</script>
 {% endblock %}

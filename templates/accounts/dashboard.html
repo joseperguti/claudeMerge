@@ -305,4 +305,345 @@ body { background: var(--black); color: var(--white); }
     </div>
 
 </div>
+
+<!-- ══ CURSOR TRAIL ══ -->
+<canvas id="trailCanvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999;"></canvas>
+
+<script>
+(function () {
+
+    /* ════════════════════════════════════════════
+       1. CURSOR TRAIL de partículas
+    ════════════════════════════════════════════ */
+    const tc  = document.getElementById('trailCanvas');
+    const tctx = tc.getContext('2d');
+    tc.width  = window.innerWidth;
+    tc.height = window.innerHeight;
+    window.addEventListener('resize', () => { tc.width = window.innerWidth; tc.height = window.innerHeight; });
+
+    let trail = [];
+    window.addEventListener('mousemove', e => {
+        for (let i = 0; i < 2; i++) {
+            trail.push({
+                x: e.clientX + (Math.random()-0.5)*8,
+                y: e.clientY + (Math.random()-0.5)*8,
+                r: Math.random()*3+1,
+                life: 1,
+                color: Math.random() > .5 ? '124,58,237' : '168,85,247'
+            });
+        }
+    });
+    (function animTrail() {
+        tctx.clearRect(0, 0, tc.width, tc.height);
+        trail = trail.filter(p => p.life > 0);
+        trail.forEach(p => {
+            p.life -= 0.04;
+            p.r   *= 0.96;
+            tctx.beginPath();
+            tctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+            tctx.fillStyle = `rgba(${p.color},${p.life * 0.6})`;
+            tctx.fill();
+        });
+        requestAnimationFrame(animTrail);
+    })();
+
+    /* ════════════════════════════════════════════
+       2. TEXT SCRAMBLE en headlines del hero
+    ════════════════════════════════════════════ */
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%';
+
+    function scramble(el, finalText, duration) {
+        const total = finalText.length;
+        let frame = 0;
+        const frames = duration / 16;
+        const id = setInterval(() => {
+            let out = '';
+            for (let i = 0; i < total; i++) {
+                if (frame / frames > i / total) {
+                    out += finalText[i];
+                } else {
+                    out += finalText[i] === ' ' ? ' ' : chars[Math.floor(Math.random()*chars.length)];
+                }
+            }
+            el.textContent = out;
+            if (++frame >= frames) { el.textContent = finalText; clearInterval(id); }
+        }, 16);
+    }
+
+    /* ════════════════════════════════════════════
+       3. CLIP-PATH REVEAL en scroll
+    ════════════════════════════════════════════ */
+    const clipCSS = `
+        .clip-reveal {
+            clip-path: inset(0 100% 0 0);
+            transition: clip-path .7s cubic-bezier(.22,1,.36,1);
+        }
+        .clip-reveal.revealed { clip-path: inset(0 0% 0 0); }
+        .fade-up {
+            opacity: 0; transform: translateY(24px);
+            transition: opacity .6s cubic-bezier(.22,1,.36,1), transform .6s cubic-bezier(.22,1,.36,1);
+        }
+        .fade-up.revealed { opacity: 1; transform: translateY(0); }
+    `;
+    const st = document.createElement('style'); st.textContent = clipCSS;
+    document.head.appendChild(st);
+
+    const revealObs = new IntersectionObserver(entries => {
+        entries.forEach((e, i) => {
+            if (e.isIntersecting) {
+                const delay = parseFloat(e.target.dataset.delay || 0);
+                setTimeout(() => e.target.classList.add('revealed'), delay);
+                revealObs.unobserve(e.target);
+            }
+        });
+    }, { threshold: 0.1 });
+
+    function applyReveal() {
+        const tab = document.querySelector('.tab-content.active');
+        if (!tab) return;
+        tab.querySelectorAll('.feat-card, .check-item, .benefit-item').forEach((el, i) => {
+            el.classList.add('fade-up');
+            el.dataset.delay = i * 55;
+            revealObs.observe(el);
+        });
+        // clip-path en los títulos
+        tab.querySelectorAll('h1').forEach((el, i) => {
+            if (!el.dataset.scrambled) {
+                el.dataset.scrambled = '1';
+                const orig = el.textContent.trim();
+                el.dataset.original = orig;
+            }
+        });
+    }
+    setTimeout(applyReveal, 100);
+
+    /* ════════════════════════════════════════════
+       4. PARALLAX de mouse en el hero
+    ════════════════════════════════════════════ */
+    window.addEventListener('mousemove', e => {
+        const hero = document.querySelector('.tab-content.active .hero-1, .tab-content.active .hero-2');
+        if (!hero) return;
+        const r  = hero.getBoundingClientRect();
+        const cx = r.left + r.width  / 2;
+        const cy = r.top  + r.height / 2;
+        const dx = (e.clientX - cx) / r.width;
+        const dy = (e.clientY - cy) / r.height;
+
+        const h1 = hero.querySelector('h1');
+        const sub = hero.querySelector('.sub, p');
+        if (h1)  h1.style.transform  = `translate(${dx*12}px, ${dy*8}px)`;
+        if (sub) sub.style.transform = `translate(${dx*6}px,  ${dy*4}px)`;
+
+        hero.querySelectorAll('.pill, .pill-2, .price-block, .btn-primary-1, .btn-primary-2').forEach(el => {
+            el.style.transform = `translate(${dx*4}px, ${dy*3}px)`;
+        });
+    });
+
+    /* ════════════════════════════════════════════
+       5. AURORA MESH animada en hero-1 y hero-2
+    ════════════════════════════════════════════ */
+    const svgNS = 'http://www.w3.org/2000/svg';
+
+    function addAurora(heroEl, colors) {
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('aria-hidden','true');
+        svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:hidden;border-radius:inherit;';
+
+        // noise filter
+        const defs = document.createElementNS(svgNS,'defs');
+        const filt = document.createElementNS(svgNS,'filter');
+        filt.setAttribute('id','aurora-blur');
+        const blur = document.createElementNS(svgNS,'feGaussianBlur');
+        blur.setAttribute('stdDeviation','40');
+        filt.appendChild(blur); defs.appendChild(filt); svg.appendChild(defs);
+
+        const blobs = colors.map((c, i) => {
+            const el = document.createElementNS(svgNS,'ellipse');
+            el.setAttribute('rx', 180 + i*30);
+            el.setAttribute('ry', 120 + i*20);
+            el.setAttribute('fill', c);
+            el.setAttribute('filter','url(#aurora-blur)');
+            el.setAttribute('opacity','.18');
+            svg.appendChild(el);
+            return el;
+        });
+
+        heroEl.style.position = 'relative';
+        heroEl.insertBefore(svg, heroEl.firstChild);
+
+        let at = Math.random() * 100;
+        (function animAurora() {
+            at += .004;
+            blobs.forEach((b, i) => {
+                b.setAttribute('cx', 50 + Math.sin(at + i*1.3)*35 + '%');
+                b.setAttribute('cy', 50 + Math.cos(at*0.8 + i*1.1)*25 + '%');
+            });
+            requestAnimationFrame(animAurora);
+        })();
+    }
+
+    const hero1 = document.querySelector('.hero-1');
+    const hero2 = document.querySelector('.hero-2');
+    if (hero1) addAurora(hero1, ['#7c3aed','#a855f7','#4c1d95','#c026d3']);
+    if (hero2) addAurora(hero2, ['#0d9488','#14b8a6','#065f46','#0891b2']);
+
+    /* ════════════════════════════════════════════
+       6. COUNTER ANIMATION (ease bounce)
+    ════════════════════════════════════════════ */
+    function easeOutBack(t) {
+        const c1 = 1.70158, c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+    function animCount(el, target, suffix, dur) {
+        const start = performance.now();
+        const isFloat = target % 1 !== 0;
+        (function tick(now) {
+            let p = Math.min((now - start) / dur, 1);
+            p = easeOutBack(p);
+            const v = isFloat ? (Math.max(0, p * target)).toFixed(1) : Math.floor(Math.max(0, p * target));
+            el.textContent = v + suffix;
+            if ((now - start) < dur) requestAnimationFrame(tick);
+            else el.textContent = (isFloat ? target.toFixed(1) : target) + suffix;
+        })(start);
+    }
+    const cntObs = new IntersectionObserver(entries => {
+        entries.forEach(e => {
+            if (!e.isIntersecting) return;
+            const el = e.target, raw = el.dataset.count;
+            if (!raw) return;
+            animCount(el, parseFloat(raw), el.dataset.suffix || '', 1400);
+            cntObs.unobserve(el);
+        });
+    }, { threshold: .5 });
+
+    document.querySelectorAll('.stat-box .num, .h-card .hc-num, .bc-stat').forEach(el => {
+        const t = el.textContent.trim();
+        if (t.includes('99.9'))      { el.dataset.count='99.9'; el.dataset.suffix='%'; }
+        else if (t.includes('12k'))  { el.dataset.count='12000'; el.dataset.suffix=''; el.textContent='+0'; }
+        else if (t.includes('3.4'))  { el.dataset.count='3.4'; el.dataset.suffix='x'; }
+        else if (t.includes('4.9'))  { el.dataset.count='4.9'; el.dataset.suffix='★'; }
+        else if (t === '10')         { el.dataset.count='10'; el.dataset.suffix=''; }
+        else if (t === '3min')       { el.dataset.count='3'; el.dataset.suffix='min'; }
+        if (el.dataset.count) cntObs.observe(el);
+    });
+
+    /* ════════════════════════════════════════════
+       7. TAB SWITCH con BLUR + SCALE
+    ════════════════════════════════════════════ */
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            const url = new URL(this.href);
+            const tab = url.searchParams.get('tab');
+
+            const current = document.querySelector('.tab-content.active');
+            if (current) {
+                current.style.transition = 'opacity .2s, transform .2s, filter .2s';
+                current.style.opacity    = '0';
+                current.style.transform  = 'scale(.97)';
+                current.style.filter     = 'blur(4px)';
+            }
+
+            setTimeout(() => {
+                document.querySelectorAll('.tab-content').forEach(t => {
+                    t.classList.remove('active'); t.style.display='none';
+                    t.style.opacity=''; t.style.transform=''; t.style.filter='';
+                });
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                const next = document.querySelector(`.tab-content[data-tab="${tab}"]`);
+                if (next) {
+                    next.style.display   = 'block';
+                    next.style.opacity   = '0';
+                    next.style.transform = 'scale(1.02)';
+                    next.style.filter    = 'blur(4px)';
+                    next.classList.add('active');
+                    requestAnimationFrame(() => {
+                        next.style.transition = 'opacity .35s, transform .35s, filter .35s';
+                        next.style.opacity    = '1';
+                        next.style.transform  = 'scale(1)';
+                        next.style.filter     = 'blur(0)';
+                    });
+                    // re-run reveal + counters
+                    setTimeout(() => {
+                        next.querySelectorAll('.feat-card, .check-item, .benefit-item').forEach((el, i) => {
+                            el.classList.remove('revealed');
+                            el.classList.add('fade-up');
+                            el.dataset.delay = i * 55;
+                            revealObs.observe(el);
+                        });
+                        next.querySelectorAll('[data-count]').forEach(el => cntObs.observe(el));
+                        // scramble nuevo headline
+                        next.querySelectorAll('h1').forEach(el => {
+                            const orig = el.dataset.original || el.textContent.trim();
+                            el.dataset.original = orig;
+                            scramble(el, orig, 700);
+                        });
+                        // nueva aurora
+                        if (!next.querySelector('svg[aria-hidden]')) {
+                            const h = next.querySelector('.hero-1');
+                            const h2 = next.querySelector('.hero-2');
+                            if (h)  addAurora(h,  ['#7c3aed','#a855f7','#4c1d95','#c026d3']);
+                            if (h2) addAurora(h2, ['#0d9488','#14b8a6','#065f46','#0891b2']);
+                        }
+                    }, 60);
+                }
+                history.pushState({}, '', url);
+            }, 220);
+        });
+    });
+
+    // asignar data-tab
+    const tcs  = document.querySelectorAll('.tab-content');
+    const tbts = document.querySelectorAll('.tab-btn');
+    tbts.forEach((b, i) => { const u=new URL(b.href); if(tcs[i]) tcs[i].dataset.tab=u.searchParams.get('tab'); });
+
+    /* ════════════════════════════════════════════
+       8. SCRAMBLE inicial en headline activa
+    ════════════════════════════════════════════ */
+    setTimeout(() => {
+        document.querySelectorAll('.tab-content.active h1').forEach(el => {
+            const orig = el.textContent.trim();
+            el.dataset.original = orig;
+            scramble(el, orig, 900);
+        });
+    }, 400);
+
+    /* ════════════════════════════════════════════
+       9. CARD HOVER GLOW border
+    ════════════════════════════════════════════ */
+    document.querySelectorAll('.feat-card, .benefit-item, .pricing-card').forEach(card => {
+        card.addEventListener('mousemove', function (e) {
+            const r  = this.getBoundingClientRect();
+            const x  = ((e.clientX - r.left) / r.width)  * 100;
+            const y  = ((e.clientY - r.top)  / r.height) * 100;
+            this.style.background = `radial-gradient(circle at ${x}% ${y}%, rgba(124,58,237,.12), transparent 60%), var(--surface, #1a1d23)`;
+        });
+        card.addEventListener('mouseleave', function () {
+            this.style.background = '';
+        });
+    });
+
+    /* ════════════════════════════════════════════
+       10. LOGO CHIPS float on hover
+    ════════════════════════════════════════════ */
+    document.querySelectorAll('.logo-chip').forEach((chip, i) => {
+        chip.addEventListener('mouseenter', function () {
+            this.style.transform    = 'translateY(-4px)';
+            this.style.borderColor  = '#7c3aed';
+            this.style.color        = '#fff';
+            this.style.boxShadow    = '0 4px 16px rgba(124,58,237,.3)';
+            this.style.transition   = 'all .2s cubic-bezier(.22,1,.36,1)';
+        });
+        chip.addEventListener('mouseleave', function () {
+            this.style.transform   = '';
+            this.style.borderColor = '';
+            this.style.color       = '';
+            this.style.boxShadow   = '';
+        });
+    });
+
+})();
+</script>
 {% endblock %}

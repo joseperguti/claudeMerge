@@ -3,136 +3,253 @@
 {% block title %}Crear Cuenta{% endblock %}
 
 {% block extra_styles %}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { background: #0a0a0a; }
+
 .auth-wrapper {
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 40px 20px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden; padding: 40px 20px;
+}
+
+#particleCanvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; z-index: 0;
+}
+
+#spotlight {
+    position: fixed; width: 520px; height: 520px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(118,75,162,.08) 0%, transparent 70%);
+    pointer-events: none; z-index: 1;
+    transform: translate(-50%, -50%);
+    transition: left .1s, top .1s;
 }
 
 .auth-card {
-    background: white;
-    border-radius: 16px;
-    padding: 48px 40px;
-    width: 100%;
-    max-width: 460px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    position: relative; z-index: 10;
+    background: rgba(20,20,28,0.88);
+    backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px);
+    border: 1px solid rgba(118,75,162,0.28);
+    border-radius: 20px; padding: 52px 44px;
+    width: 100%; max-width: 460px;
+    box-shadow: 0 0 80px rgba(118,75,162,.08), inset 0 1px 0 rgba(255,255,255,.05);
+    opacity: 0; transform: scale(.94) translateY(20px);
+    transition: opacity .6s cubic-bezier(.22,1,.36,1), transform .6s cubic-bezier(.22,1,.36,1);
 }
+.auth-card.visible { opacity: 1; transform: scale(1) translateY(0); }
+.auth-card::before {
+    content: ''; position: absolute; inset: -1px; border-radius: 21px;
+    background: linear-gradient(135deg, rgba(118,75,162,.4), rgba(102,126,234,.3), rgba(168,85,247,.2));
+    background-size: 300% 300%; animation: borderFlow 5s ease infinite;
+    z-index: -1; opacity: 0; transition: opacity .6s;
+}
+.auth-card.visible::before { opacity: 1; }
+@keyframes borderFlow { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+
+.auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
 
 .auth-card h1 {
-    text-align: center;
-    font-size: 28px;
-    font-weight: 700;
-    color: #333;
-    margin-bottom: 8px;
+    text-align: center; font-size: 26px; font-weight: 700;
+    color: #fff; letter-spacing: -.5px; margin-bottom: 6px;
+    font-family: -apple-system, sans-serif;
 }
-
 .auth-card .subtitle {
-    text-align: center;
-    color: #888;
-    font-size: 14px;
-    margin-bottom: 32px;
+    text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 28px;
+    font-family: -apple-system, sans-serif; min-height: 20px;
 }
 
-.form-group {
-    margin-bottom: 18px;
+/* ── arc-segments progress ── */
+.arc-progress-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    margin-bottom: 24px;
 }
+.arc-label { font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .5px; text-transform: uppercase; font-family: -apple-system, sans-serif; }
 
+/* ── campos ── */
+.form-group { margin-bottom: 16px; position: relative; }
 .form-group label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    color: #555;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    display: block; font-size: 12px; font-weight: 600;
+    color: #6b7280; margin-bottom: 7px;
+    text-transform: uppercase; letter-spacing: .8px;
+    font-family: -apple-system, sans-serif; transition: color .2s;
 }
-
+.form-group:focus-within label { color: #a855f7; }
 .form-group input {
-    width: 100%;
-    padding: 12px 16px;
-    border: 2px solid #e8e8e8;
-    border-radius: 8px;
-    font-size: 15px;
-    transition: border-color 0.2s;
-    outline: none;
+    width: 100%; padding: 13px 40px 13px 16px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
+    font-size: 15px; color: #fff; outline: none;
+    font-family: -apple-system, sans-serif;
+    transition: border-color .25s, box-shadow .25s, background .25s;
 }
-
+.form-group input::placeholder { color: rgba(255,255,255,.18); }
 .form-group input:focus {
-    border-color: #667eea;
+    border-color: #764ba2; background: rgba(118,75,162,.07);
+    box-shadow: 0 0 0 3px rgba(118,75,162,.18), 0 0 20px rgba(118,75,162,.1);
 }
+.form-group.valid input   { border-color: #30d158; }
+.form-group.invalid input { border-color: #ff453a; }
 
-.help-text {
-    font-size: 11px;
-    color: #aaa;
-    margin-top: 4px;
+/* scan line */
+.scan-line {
+    position: absolute; bottom: 0; left: 0;
+    height: 2px; width: 0; border-radius: 2px;
+    background: linear-gradient(90deg, #764ba2, #a855f7);
+    transition: width .35s cubic-bezier(.22,1,.36,1);
 }
+.form-group input:focus ~ .scan-line { width: 100%; }
 
-.errorlist {
-    list-style: none;
-    color: #e74c3c;
-    font-size: 12px;
-    margin-top: 4px;
+/* status icon */
+.status-icon {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    width: 20px; height: 20px; opacity: 0; transition: opacity .2s;
+    pointer-events: none;
 }
+.form-group.valid .status-icon.ok    { opacity: 1; }
+.form-group.invalid .status-icon.err { opacity: 1; }
 
+/* ── password strength arcos ── */
+.pwd-arcs-wrap {
+    display: flex; align-items: center; gap: 10px; margin-top: 8px;
+}
+#pwdArcSvg { flex-shrink: 0; }
+.pwd-arcs-label { font-size: 12px; font-weight: 600; color: #6b7280; font-family: -apple-system, sans-serif; transition: color .3s; }
+
+.help-text { font-size: 11px; color: #4b5563; margin-top: 4px; font-family: -apple-system, sans-serif; }
+.errorlist { list-style: none; color: #ff453a; font-size: 12px; margin-top: 5px; font-family: -apple-system, sans-serif; }
+
+/* ── botón magnético ── */
+.btn-magnetic-wrap { position: relative; display: block; margin-top: 10px; }
 .btn-primary {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    margin-top: 8px;
-    transition: opacity 0.2s, transform 0.1s;
+    width: 100%; padding: 14px;
+    background: linear-gradient(135deg, #764ba2, #667eea);
+    background-size: 200% 200%;
+    color: white; border: none; border-radius: 10px;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+    font-family: -apple-system, sans-serif;
+    position: relative; overflow: hidden;
+    transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
 }
+.btn-primary:hover { box-shadow: 0 8px 32px rgba(118,75,162,.45); }
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary .spinner { display:none; width:18px; height:18px; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.btn-primary.loading .btn-label { opacity:0; }
+.btn-primary.loading .spinner { display:block; }
 
-.btn-primary:hover {
-    opacity: 0.9;
-    transform: translateY(-1px);
+.burst-particle {
+    position:fixed; width:6px; height:6px; border-radius:50%;
+    pointer-events:none; z-index:9999; background:#764ba2;
+    animation:burst .6s ease-out forwards;
 }
+@keyframes burst { to { transform:translate(var(--tx),var(--ty)) scale(0); opacity:0; } }
 
 .auth-footer {
-    text-align: center;
-    margin-top: 24px;
-    font-size: 14px;
-    color: #888;
+    text-align:center; margin-top:24px; font-size:14px;
+    color:#6b7280; font-family:-apple-system,sans-serif;
 }
-
-.auth-footer a {
-    color: #667eea;
-    text-decoration: none;
-    font-weight: 600;
-}
+.auth-footer a { color:#a855f7; text-decoration:none; font-weight:600; }
+.auth-footer a:hover { text-decoration:underline; }
 {% endblock %}
 
 {% block content %}
 <div class="auth-wrapper">
-    <div class="auth-card">
-        <h1>Crear Cuenta</h1>
-        <p class="subtitle">Registrate para acceder a las ofertas</p>
+    <canvas id="particleCanvas"></canvas>
+    <div id="spotlight"></div>
 
-        <form method="post">
+    <div class="auth-card" id="authCard">
+
+        <div class="auth-logo">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <rect x="1" y="1" width="54" height="54" rx="14"
+                    stroke="url(#rg)" stroke-width="1.5" fill="rgba(118,75,162,.1)"/>
+                <defs>
+                    <linearGradient id="rg" x1="0" y1="0" x2="56" y2="56">
+                        <stop offset="0%" stop-color="#764ba2"/>
+                        <stop offset="100%" stop-color="#a855f7"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="28" cy="28" r="10" stroke="url(#rg)" stroke-width="2"
+                    fill="none" stroke-dasharray="62.8" stroke-dashoffset="62.8"
+                    id="logoCircle"/>
+                <circle cx="28" cy="28" r="4" fill="url(#rg)" opacity="0" id="logoDot"/>
+            </svg>
+        </div>
+
+        <h1>Crear cuenta</h1>
+        <p class="subtitle" id="cardSubtitle"></p>
+
+        <!-- Arc segments progress -->
+        <div class="arc-progress-wrap">
+            <svg id="arcSvg" width="120" height="64" viewBox="0 0 120 64">
+                <!-- 4 arcos -->
+                <path d="M10,60 A50,50 0 0,1 35,17" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="6" stroke-linecap="round" id="arc0bg"/>
+                <path d="M10,60 A50,50 0 0,1 35,17" fill="none" stroke="#ff453a" stroke-width="6" stroke-linecap="round" id="arc0" stroke-dasharray="55" stroke-dashoffset="55"/>
+
+                <path d="M37,14 A50,50 0 0,1 60,10" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="6" stroke-linecap="round" id="arc1bg"/>
+                <path d="M37,14 A50,50 0 0,1 60,10" fill="none" stroke="#ff9f0a" stroke-width="6" stroke-linecap="round" id="arc1" stroke-dasharray="28" stroke-dashoffset="28"/>
+
+                <path d="M62,10 A50,50 0 0,1 85,14" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="6" stroke-linecap="round" id="arc2bg"/>
+                <path d="M62,10 A50,50 0 0,1 85,14" fill="none" stroke="#30d158" stroke-width="6" stroke-linecap="round" id="arc2" stroke-dasharray="28" stroke-dashoffset="28"/>
+
+                <path d="M87,17 A50,50 0 0,1 110,60" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="6" stroke-linecap="round" id="arc3bg"/>
+                <path d="M87,17 A50,50 0 0,1 110,60" fill="none" stroke="#a855f7" stroke-width="6" stroke-linecap="round" id="arc3" stroke-dasharray="55" stroke-dashoffset="55"/>
+
+                <text id="arcPct" x="60" y="56" text-anchor="middle" font-size="13" font-weight="700" fill="#fff" font-family="-apple-system,sans-serif">0%</text>
+            </svg>
+            <span class="arc-label" id="arcLabel">Completa el formulario</span>
+        </div>
+
+        <form method="post" id="registerForm" novalidate>
             {% csrf_token %}
             {% for field in form %}
-            <div class="form-group">
+            <div class="form-group {% if field.errors %}invalid{% endif %}" data-field="{{ field.html_name }}">
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
+                <div class="scan-line"></div>
+                <svg class="status-icon ok" viewBox="0 0 20 20" fill="none">
+                    <circle cx="10" cy="10" r="8" stroke="#30d158" stroke-width="1.5"/>
+                    <path d="M6.5 10l2.5 2.5 4.5-4.5" stroke="#30d158" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <svg class="status-icon err" viewBox="0 0 20 20" fill="none">
+                    <circle cx="10" cy="10" r="8" stroke="#ff453a" stroke-width="1.5"/>
+                    <path d="M7 7l6 6M13 7l-6 6" stroke="#ff453a" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
                 {% if field.help_text %}
                 <p class="help-text">{{ field.help_text }}</p>
                 {% endif %}
                 {% if field.errors %}
-                <ul class="errorlist">
-                    {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
-                </ul>
+                <ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                {% endif %}
+                {% if field.html_name == 'password1' %}
+                <div class="pwd-arcs-wrap">
+                    <svg id="pwdArcSvg" width="48" height="48" viewBox="0 0 48 48">
+                        <circle cx="24" cy="24" r="18" stroke="rgba(255,255,255,.08)" stroke-width="3" fill="none"/>
+                        <circle id="pwdArc" cx="24" cy="24" r="18" stroke="#6b7280" stroke-width="3"
+                            fill="none" stroke-linecap="round" stroke-dasharray="113.1"
+                            stroke-dashoffset="113.1" transform="rotate(-90 24 24)"/>
+                        <text id="pwdArcTxt" x="24" y="28" text-anchor="middle"
+                            font-size="10" font-weight="700" fill="#6b7280"
+                            font-family="-apple-system,sans-serif">0</text>
+                    </svg>
+                    <span class="pwd-arcs-label" id="pwdLabel">Introduce una contrasena</span>
+                </div>
                 {% endif %}
             </div>
             {% endfor %}
-            <button type="submit" class="btn-primary">Crear cuenta</button>
+
+            <div class="btn-magnetic-wrap" id="magnetWrap">
+                <button type="submit" class="btn-primary" id="submitBtn">
+                    <span class="btn-label">Crear cuenta</span>
+                    <svg class="spinner" viewBox="0 0 18 18" fill="none">
+                        <circle cx="9" cy="9" r="7" stroke="rgba(255,255,255,.25)" stroke-width="2"/>
+                        <path d="M9 2a7 7 0 0 1 7 7" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
         </form>
 
         <div class="auth-footer">
@@ -140,4 +257,177 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+
+    /* ══ 1. ENTRADA ══ */
+    const card = document.getElementById('authCard');
+    requestAnimationFrame(() => setTimeout(() => card.classList.add('visible'), 60));
+
+    /* ══ 2. TYPEWRITER subtítulo ══ */
+    const sub  = document.getElementById('cardSubtitle');
+    const text = 'Registrate para acceder a las ofertas';
+    let ti = 0;
+    setTimeout(function type() {
+        sub.textContent = text.slice(0, ti++) + (ti <= text.length ? '|' : '');
+        if (ti <= text.length + 1) setTimeout(type, 40);
+        else sub.textContent = text;
+    }, 400);
+
+    /* ══ 3. LOGO ANIMATION ══ */
+    const lc = document.getElementById('logoCircle');
+    const ld = document.getElementById('logoDot');
+    setTimeout(() => {
+        lc.style.transition = 'stroke-dashoffset 1s cubic-bezier(.4,0,.2,1)';
+        lc.style.strokeDashoffset = '0';
+        setTimeout(() => {
+            ld.style.transition = 'opacity .3s';
+            ld.setAttribute('opacity', '1');
+        }, 900);
+    }, 300);
+
+    /* ══ 4. PARTICLE NETWORK ══ */
+    const canvas = document.getElementById('particleCanvas');
+    const ctx    = canvas.getContext('2d');
+    let W, H, particles = [], mouse = { x: -9999, y: -9999 };
+    function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+    for (let i = 0; i < 80; i++) particles.push({
+        x: Math.random()*W, y: Math.random()*H,
+        vx: (Math.random()-.5)*.5, vy: (Math.random()-.5)*.5,
+        r: Math.random()*1.8+.7, op: Math.random()*.4+.15
+    });
+    (function draw() {
+        ctx.clearRect(0,0,W,H);
+        particles.forEach(p => {
+            p.x += p.vx; p.y += p.vy;
+            if (p.x<0||p.x>W) p.vx*=-1;
+            if (p.y<0||p.y>H) p.vy*=-1;
+            const dx=p.x-mouse.x, dy=p.y-mouse.y, d=Math.sqrt(dx*dx+dy*dy);
+            if (d<90) { p.x+=dx/d*1.5; p.y+=dy/d*1.5; }
+            ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+            ctx.fillStyle=`rgba(168,85,247,${p.op})`; ctx.fill();
+        });
+        for (let i=0;i<particles.length;i++) for (let j=i+1;j<particles.length;j++) {
+            const dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y;
+            const d=Math.sqrt(dx*dx+dy*dy);
+            if (d<110) {
+                ctx.beginPath();
+                ctx.moveTo(particles[i].x,particles[i].y);
+                ctx.lineTo(particles[j].x,particles[j].y);
+                ctx.strokeStyle=`rgba(168,85,247,${.12*(1-d/110)})`;
+                ctx.lineWidth=.5; ctx.stroke();
+            }
+        }
+        requestAnimationFrame(draw);
+    })();
+
+    /* ══ 5. SPOTLIGHT ══ */
+    const spotlight = document.getElementById('spotlight');
+    window.addEventListener('mousemove', e => {
+        spotlight.style.left = e.clientX+'px'; spotlight.style.top = e.clientY+'px';
+        mouse.x = e.clientX; mouse.y = e.clientY;
+    });
+
+    /* ══ 6. ARC-SEGMENTS PROGRESS ══ */
+    const arcEls  = ['arc0','arc1','arc2','arc3'].map(id => document.getElementById(id));
+    const arcDash = [55, 28, 28, 55];
+    const arcPct  = document.getElementById('arcPct');
+    const arcLbl  = document.getElementById('arcLabel');
+    const fields  = document.querySelectorAll('.form-group input');
+
+    arcEls.forEach(a => a.style.transition = 'stroke-dashoffset .4s ease, stroke .4s ease');
+
+    function updateArcs() {
+        let filled = 0;
+        fields.forEach(f => { if (f.value.trim()) filled++; });
+        const pct  = Math.round((filled / fields.length) * 100);
+        const segs = Math.floor((filled / fields.length) * 4);
+        arcEls.forEach((a, i) => {
+            if (i < segs) a.style.strokeDashoffset = '0';
+            else a.style.strokeDashoffset = arcDash[i];
+        });
+        arcPct.textContent = pct + '%';
+        const labels = ['Completa el formulario','Vas bien, sigue...','Casi listo...','Listo para crear!'];
+        arcLbl.textContent = labels[Math.min(segs, 3)];
+    }
+
+    fields.forEach(f => {
+        f.addEventListener('input', updateArcs);
+        f.addEventListener('blur', function () {
+            const wrap = this.closest('.form-group');
+            wrap.classList.remove('valid','invalid');
+            if (this.value.trim()) wrap.classList.add('valid');
+        });
+    });
+
+    /* ══ 7. PASSWORD ARC ══ */
+    const pwd1    = document.querySelector('[data-field="password1"] input');
+    const pwdArc  = document.getElementById('pwdArc');
+    const pwdTxt  = document.getElementById('pwdArcTxt');
+    const pwdLbl  = document.getElementById('pwdLabel');
+    const total   = 113.1;
+
+    if (pwdArc) pwdArc.style.transition = 'stroke-dashoffset .4s ease, stroke .4s ease';
+
+    function scorePassword(p) {
+        let s = 0;
+        if (p.length >= 8)  s++;
+        if (p.length >= 12) s++;
+        if (/[A-Z]/.test(p) && /[a-z]/.test(p)) s++;
+        if (/[0-9]/.test(p)) s++;
+        if (/[^A-Za-z0-9]/.test(p)) s++;
+        return Math.min(s, 4);
+    }
+
+    if (pwd1 && pwdArc) {
+        pwd1.addEventListener('input', function () {
+            const sc = scorePassword(this.value);
+            const pct = sc * 25;
+            pwdArc.style.strokeDashoffset = total - (total * pct / 100);
+            const colors = ['#6b7280','#ff453a','#ff9f0a','#30d158','#a855f7'];
+            const lbls   = ['Introduce una contrasena','Muy debil','Debil','Buena','Fuerte'];
+            pwdArc.style.stroke = colors[sc];
+            pwdTxt.style.fill   = colors[sc];
+            pwdTxt.textContent  = pct + '%';
+            pwdLbl.textContent  = lbls[sc];
+            pwdLbl.style.color  = colors[sc];
+        });
+    }
+
+    /* ══ 8. BOTÓN MAGNÉTICO ══ */
+    const wrap = document.getElementById('magnetWrap');
+    const btn  = document.getElementById('submitBtn');
+    wrap.addEventListener('mousemove', function (e) {
+        const r=this.getBoundingClientRect();
+        const dx=(e.clientX-r.left-r.width/2)*.28;
+        const dy=(e.clientY-r.top-r.height/2)*.28;
+        btn.style.transform=`translate(${dx}px,${dy}px)`;
+    });
+    wrap.addEventListener('mouseleave', () => {
+        btn.style.transform='translate(0,0)';
+        btn.style.transition='transform .4s cubic-bezier(.22,1,.36,1)';
+    });
+
+    /* ══ 9. BURST al clic ══ */
+    btn.addEventListener('click', function (e) {
+        const colors=['#a855f7','#764ba2','#667eea','#f093fb'];
+        for (let i=0;i<14;i++) {
+            const bp=document.createElement('div'); bp.className='burst-particle';
+            const angle=(Math.PI*2*i)/14, dist=Math.random()*80+40;
+            bp.style.left=e.clientX+'px'; bp.style.top=e.clientY+'px';
+            bp.style.background=colors[Math.floor(Math.random()*colors.length)];
+            bp.style.setProperty('--tx',Math.cos(angle)*dist+'px');
+            bp.style.setProperty('--ty',Math.sin(angle)*dist+'px');
+            document.body.appendChild(bp);
+            bp.addEventListener('animationend',()=>bp.remove());
+        }
+    });
+
+    /* ══ 10. LOADING ══ */
+    document.getElementById('registerForm').addEventListener('submit',()=>btn.classList.add('loading'));
+
+})();
+</script>
 {% endblock %}
