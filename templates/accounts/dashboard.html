@@ -401,7 +401,7 @@ body { background: var(--black); color: var(--white); }
     function applyReveal() {
         const tab = document.querySelector('.tab-content.active');
         if (!tab) return;
-        tab.querySelectorAll('.feat-card, .check-item, .benefit-item').forEach((el, i) => {
+        tab.querySelectorAll('.feat-card, .check-item').forEach((el, i) => {
             el.classList.add('fade-up');
             el.dataset.delay = i * 55;
             revealObs.observe(el);
@@ -516,7 +516,7 @@ body { background: var(--black); color: var(--white); }
         });
     }, { threshold: .5 });
 
-    document.querySelectorAll('.stat-box .num, .h-card .hc-num, .bc-stat').forEach(el => {
+    document.querySelectorAll('.stat-box .num').forEach(el => {
         const t = el.textContent.trim();
         if (t.includes('99.9'))      { el.dataset.count='99.9'; el.dataset.suffix='%'; }
         else if (t.includes('12k'))  { el.dataset.count='12000'; el.dataset.suffix=''; el.textContent='+0'; }
@@ -567,7 +567,7 @@ body { background: var(--black); color: var(--white); }
                     });
                     // re-run reveal + counters
                     setTimeout(() => {
-                        next.querySelectorAll('.feat-card, .check-item, .benefit-item').forEach((el, i) => {
+                        next.querySelectorAll('.feat-card, .check-item').forEach((el, i) => {
                             el.classList.remove('revealed');
                             el.classList.add('fade-up');
                             el.dataset.delay = i * 55;
@@ -613,7 +613,7 @@ body { background: var(--black); color: var(--white); }
     /* ════════════════════════════════════════════
        9. CARD HOVER GLOW border
     ════════════════════════════════════════════ */
-    document.querySelectorAll('.feat-card, .benefit-item, .pricing-card').forEach(card => {
+    document.querySelectorAll('.feat-card, .check-item, .pricing-card').forEach(card => {
         card.addEventListener('mousemove', function (e) {
             const r  = this.getBoundingClientRect();
             const x  = ((e.clientX - r.left) / r.width)  * 100;
