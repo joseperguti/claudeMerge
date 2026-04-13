@@ -2,11 +2,13 @@
 # smart-merge.sh: merge asistido por Claude
 #
 # Uso:
-#   bash scripts/smart-merge.sh <rama>           # merge normal con resolución inteligente
-#   bash scripts/smart-merge.sh <rama> --dry-run # analiza sin tocar nada
+#   bash scripts/smart-merge.sh <rama>                      # merge normal con resolución inteligente
+#   bash scripts/smart-merge.sh <rama> --dry-run           # analiza sin tocar nada
+#   bash scripts/smart-merge.sh <rama> --auto              # sin prompts; bloquea en REVISAR/BLOQUEADO
+#   bash scripts/smart-merge.sh <rama> --dry-run --auto    # devuelve código según veredicto
 #
 # Qué hace:
-#   1. Lee la descripción de la tarea del último commit de <rama>
+#   1. Lee la descripción de la tarea del primer commit de <rama> (intención original)
 #   2. Intenta el merge (--no-commit para poder inspeccionar)
 #   3. Si hay conflictos, Claude resuelve cada archivo usando SOLO
 #      los cambios que corresponden a la tarea declarada
@@ -16,14 +18,47 @@
 set -euo pipefail
 # Desactivar pipefail puntualmente en capturas con head/tail para evitar SIGPIPE
 capture() { { eval "$1" || true; } 2>/dev/null | head -c "${2:-12000}"; }
+usage() {
+  echo "Uso: bash scripts/smart-merge.sh <rama> [--dry-run] [--auto]"
+}
 
 CLAUDE=/Users/josemaria/.local/bin/claude
-BRANCH="${1:-}"
-DRY_RUN="${2:-}"
+BRANCH=""
+DRY_RUN=false
+AUTO_MODE=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run)
+      DRY_RUN=true
+      ;;
+    --auto)
+      AUTO_MODE=true
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --*)
+      echo "❌  Opción no reconocida: $arg"
+      usage
+      exit 1
+      ;;
+    *)
+      if [[ -z "$BRANCH" ]]; then
+        BRANCH="$arg"
+      else
+        echo "❌  Solo se admite una rama. Recibido extra: $arg"
+        usage
+        exit 1
+      fi
+      ;;
+  esac
+done
 
 # ── Validaciones ──────────────────────────────────────────────────────────────
 if [[ -z "$BRANCH" ]]; then
-  echo "Uso: bash scripts/smart-merge.sh <rama> [--dry-run]"
+  usage
   exit 1
 fi
 
@@ -60,7 +95,7 @@ echo "   Tarea: $TASK_DESCRIPTION" | head -2
 echo ""
 
 # ── Modo dry-run: solo analiza, no toca nada ──────────────────────────────────
-if [[ "$DRY_RUN" == "--dry-run" ]]; then
+if [[ "$DRY_RUN" == true ]]; then
   echo "🔍  Modo dry-run: analizando sin mergear..."
   echo ""
 
@@ -90,9 +125,21 @@ Responde:
 ### 📋 Veredicto
 APROBADO, REVISAR o BLOQUEADO (una sola palabra al final)"
 
+  report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null || true)
+  verdict=$(echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1)
+
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  "$CLAUDE" --print "$PROMPT"
+  echo "$report"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  if [[ "$AUTO_MODE" == true ]]; then
+    case "$verdict" in
+      APROBADO) exit 0 ;;
+      REVISAR) exit 2 ;;
+      BLOQUEADO) exit 3 ;;
+      *) exit 4 ;;
+    esac
+  fi
   exit 0
 fi
 
@@ -142,6 +189,11 @@ Responde:
       echo "✅  Merge confirmado."
       ;;
     REVISAR)
+      if [[ "$AUTO_MODE" == true ]]; then
+        git merge --abort
+        echo "⚠️  REVISAR detectado en modo --auto. Merge cancelado."
+        exit 2
+      fi
       echo "⚠️  Hay cambios menores no declarados. ¿Confirmar el merge? [s/N]"
       read -r answer < /dev/tty
       if [[ "$answer" =~ ^[sS]$ ]]; then
@@ -155,9 +207,14 @@ Responde:
     BLOQUEADO)
       git merge --abort
       echo "❌  BLOQUEADO — Merge cancelado. Revisa los cambios fuera de scope."
-      exit 1
+      exit 3
       ;;
     *)
+      if [[ "$AUTO_MODE" == true ]]; then
+        git merge --abort
+        echo "⚠️  Veredicto no claro en modo --auto. Merge cancelado."
+        exit 4
+      fi
       echo "⚠️  Veredicto no claro. ¿Confirmar el merge? [s/N]"
       read -r answer < /dev/tty
       if [[ "$answer" =~ ^[sS]$ ]]; then
@@ -270,6 +327,11 @@ Responde:
 
   case "$verdict" in
     APROBADO|REVISAR)
+      if [[ "$verdict" == "REVISAR" && "$AUTO_MODE" == true ]]; then
+        git merge --abort
+        echo "⚠️  REVISAR detectado en verificación final (modo --auto). Merge cancelado."
+        exit 2
+      fi
       [[ "$verdict" == "REVISAR" ]] && echo "⚠️  Hay observaciones. ¿Confirmar igualmente? [s/N]" && read -r answer < /dev/tty && [[ ! "$answer" =~ ^[sS]$ ]] && git merge --abort && echo "↩️   Merge cancelado." && exit 1
       git commit --no-edit
       echo "✅  Merge con resolución inteligente confirmado."
@@ -277,9 +339,14 @@ Responde:
     BLOQUEADO)
       git merge --abort
       echo "❌  BLOQUEADO — La resolución introdujo cambios fuera de scope. Merge cancelado."
-      exit 1
+      exit 3
       ;;
     *)
+      if [[ "$AUTO_MODE" == true ]]; then
+        git merge --abort
+        echo "⚠️  Veredicto no claro en verificación final (modo --auto). Merge cancelado."
+        exit 4
+      fi
       echo "⚠️  Veredicto no claro. ¿Confirmar el merge? [s/N]"
       read -r answer < /dev/tty
       if [[ "$answer" =~ ^[sS]$ ]]; then
