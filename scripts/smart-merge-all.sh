@@ -4,53 +4,82 @@
 # Uso:
 #   bash scripts/smart-merge-all.sh
 #   bash scripts/smart-merge-all.sh main
-#   bash scripts/smart-merge-all.sh main feature/a feature/b
 #   bash scripts/smart-merge-all.sh main --dry-run
-#
-# Comportamiento:
-#   - Si no se indican ramas, descubre ramas locales con commits pendientes
-#     respecto a la rama base.
-#   - Ejecuta smart-merge.sh en modo --auto para cada rama.
-#   - Solo mergea automáticamente cuando el veredicto es APROBADO.
+#   bash scripts/smart-merge-all.sh main --task-file scripts/backlog-task.md --require-checks
+#   bash scripts/smart-merge-all.sh main feature/a feature/b
 
 set -euo pipefail
 
 usage() {
-  echo "Uso: bash scripts/smart-merge-all.sh [rama-base] [--dry-run] [rama1 rama2 ...]"
+  echo "Uso: bash scripts/smart-merge-all.sh [rama-base] [--dry-run] [--task-file <ruta>|--task-file=<ruta>] [--require-checks] [--check-cmd <cmd>] [rama1 rama2 ...]"
 }
 
 BASE_BRANCH="main"
 BASE_SET=false
 DRY_RUN=false
+TASK_FILE=""
+REQUIRE_CHECKS=false
+CHECK_CMD=""
 declare -a BRANCHES=()
+declare -a EXTRA_ARGS=()
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --dry-run)
       DRY_RUN=true
+      EXTRA_ARGS+=("--dry-run")
+      shift
+      ;;
+    --require-checks)
+      REQUIRE_CHECKS=true
+      EXTRA_ARGS+=("--require-checks")
+      shift
+      ;;
+    --check-cmd)
+      [[ $# -lt 2 ]] && echo "❌  Falta valor para --check-cmd" && exit 1
+      CHECK_CMD="$2"
+      EXTRA_ARGS+=("--check-cmd" "$2")
+      shift 2
+      ;;
+    --task-file)
+      [[ $# -lt 2 ]] && echo "❌  Falta ruta para --task-file" && exit 1
+      TASK_FILE="$2"
+      EXTRA_ARGS+=("--task-file" "$2")
+      shift 2
+      ;;
+    --task-file=*)
+      TASK_FILE="${1#*=}"
+      EXTRA_ARGS+=("--task-file=$TASK_FILE")
+      shift
       ;;
     -h|--help)
       usage
       exit 0
       ;;
     --*)
-      echo "❌  Opción no reconocida: $arg"
+      echo "❌  Opción no reconocida: $1"
       usage
       exit 1
       ;;
     *)
       if [[ "$BASE_SET" == false ]]; then
-        BASE_BRANCH="$arg"
+        BASE_BRANCH="$1"
         BASE_SET=true
       else
-        BRANCHES+=("$arg")
+        BRANCHES+=("$1")
       fi
+      shift
       ;;
   esac
 done
 
 if ! git rev-parse --verify "$BASE_BRANCH" >/dev/null 2>&1; then
   echo "❌  Rama base '$BASE_BRANCH' no existe."
+  exit 1
+fi
+
+if [[ -n "$TASK_FILE" && ! -f "$TASK_FILE" ]]; then
+  echo "❌  --task-file no existe: $TASK_FILE"
   exit 1
 fi
 
@@ -87,11 +116,14 @@ echo "📋  Ramas candidatas:"
 for branch in "${BRANCHES[@]}"; do
   echo "   • $branch"
 done
+[[ -n "$TASK_FILE" ]] && echo "📋  Contexto backlog: $TASK_FILE"
+[[ "$REQUIRE_CHECKS" == true ]] && echo "📋  Checks obligatorios: ${CHECK_CMD:-SMART_MERGE_CHECK_CMD o default}"
 echo ""
 
 merged=0
 review=0
 blocked=0
+check_fail=0
 failed=0
 
 for branch in "${BRANCHES[@]}"; do
@@ -106,11 +138,7 @@ for branch in "${BRANCHES[@]}"; do
   fi
 
   set +e
-  if [[ "$DRY_RUN" == true ]]; then
-    bash scripts/smart-merge.sh "$branch" --dry-run --auto
-  else
-    bash scripts/smart-merge.sh "$branch" --auto
-  fi
+  bash scripts/smart-merge.sh "$branch" --auto "${EXTRA_ARGS[@]}"
   code=$?
   set -e
 
@@ -131,6 +159,10 @@ for branch in "${BRANCHES[@]}"; do
       echo "❌  BLOQUEADO: '$branch' no se mergea."
       blocked=$((blocked + 1))
       ;;
+    5)
+      echo "❌  Checks técnicos fallidos: '$branch' no se mergea."
+      check_fail=$((check_fail + 1))
+      ;;
     *)
       echo "❌  Error/resultado no claro al procesar '$branch' (exit $code)."
       failed=$((failed + 1))
@@ -145,6 +177,7 @@ echo "📊  Resumen"
 echo "   • Aprobadas y procesadas: $merged"
 echo "   • En revisión (omitidas): $review"
 echo "   • Bloqueadas: $blocked"
+echo "   • Checks fallidos: $check_fail"
 echo "   • Fallos técnicos: $failed"
 echo ""
 
@@ -152,7 +185,7 @@ if [[ "$DRY_RUN" == false ]]; then
   echo "Rama actual al finalizar: $(git rev-parse --abbrev-ref HEAD)"
 fi
 
-if [[ "$failed" -gt 0 ]]; then
+if [[ "$failed" -gt 0 || "$check_fail" -gt 0 ]]; then
   exit 1
 fi
 
