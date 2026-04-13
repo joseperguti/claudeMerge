@@ -126,7 +126,7 @@ Responde:
 APROBADO, REVISAR o BLOQUEADO (una sola palabra al final)"
 
   report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null || true)
-  verdict=$(echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1)
+  verdict=$({ echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1; } || true)
 
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "$report"
@@ -176,7 +176,7 @@ Responde:
 ### 📋 Veredicto (APROBADO / REVISAR / BLOQUEADO)"
 
   report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null)
-  verdict=$(echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1)
+  verdict=$({ echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1; } || true)
 
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "$report"
@@ -318,7 +318,7 @@ Responde:
 ### 📋 Veredicto (APROBADO / REVISAR / BLOQUEADO)"
 
   report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null)
-  verdict=$(echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1)
+  verdict=$({ echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1; } || true)
 
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "$report"
