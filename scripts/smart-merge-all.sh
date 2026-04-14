@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# smart-merge-all.sh: orquestador de merges automáticos con Claude
+# smart-merge-all.sh: orquestador de merges automáticos con Claude + Codex
 #
 # Uso:
 #   bash scripts/smart-merge-all.sh

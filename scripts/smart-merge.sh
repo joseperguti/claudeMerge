@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# smart-merge.sh: merge asistido por Claude
+# smart-merge.sh: merge asistido por Claude + Codex
 #
 # Uso:
 #   bash scripts/smart-merge.sh <rama>
@@ -38,7 +38,163 @@ run_checks() {
   return 1
 }
 
-CLAUDE=/Users/josemaria/.local/bin/claude
+run_claude() {
+  local prompt="$1"
+  [[ -x "$CLAUDE_BIN" ]] || return 1
+  "$CLAUDE_BIN" --print "$prompt" 2>/dev/null || true
+}
+
+run_codex() {
+  local prompt="$1"
+  [[ -n "$CODEX_BIN" ]] || return 1
+
+  local out_file
+  out_file=$(mktemp)
+  if ! printf "%s" "$prompt" | "$CODEX_BIN" exec --sandbox read-only --output-last-message "$out_file" - >/dev/null 2>&1; then
+    rm -f "$out_file"
+    return 1
+  fi
+  cat "$out_file"
+  rm -f "$out_file"
+}
+
+REVIEW_CLAUDE_REPORT=""
+REVIEW_CLAUDE_VERDICT=""
+REVIEW_CODEX_REPORT=""
+REVIEW_CODEX_VERDICT=""
+REVIEW_FINAL_VERDICT=""
+
+run_dual_review() {
+  local base_prompt="$1"
+
+  REVIEW_CLAUDE_REPORT=""
+  REVIEW_CLAUDE_VERDICT=""
+  REVIEW_CODEX_REPORT=""
+  REVIEW_CODEX_VERDICT=""
+  REVIEW_FINAL_VERDICT=""
+
+  echo "🤖  Claude revisando..."
+  REVIEW_CLAUDE_REPORT=$(run_claude "$base_prompt" || true)
+  REVIEW_CLAUDE_VERDICT=$(extract_verdict "$REVIEW_CLAUDE_REPORT")
+
+  if [[ -z "$REVIEW_CLAUDE_REPORT" ]]; then
+    echo "⚠️  No se pudo obtener informe de Claude."
+  else
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "### Claude"
+    echo "$REVIEW_CLAUDE_REPORT"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  fi
+
+  local codex_prompt
+  codex_prompt="Eres un segundo revisor técnico. Audita el análisis previo de Claude y valida si omitió algo.
+
+$base_prompt
+
+## Informe previo de Claude
+$REVIEW_CLAUDE_REPORT
+
+Valida expresamente el informe de Claude.
+Responde con el mismo formato y cierra con APROBADO, REVISAR o BLOQUEADO en la última línea."
+
+  echo ""
+  echo "🤖  Codex auditando..."
+  REVIEW_CODEX_REPORT=$(run_codex "$codex_prompt" || true)
+  REVIEW_CODEX_VERDICT=$(extract_verdict "$REVIEW_CODEX_REPORT")
+
+  if [[ -z "$REVIEW_CODEX_REPORT" ]]; then
+    echo "⚠️  No se pudo obtener informe de Codex."
+  else
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "### Codex"
+    echo "$REVIEW_CODEX_REPORT"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  fi
+
+  if [[ "$REVIEW_CLAUDE_VERDICT" == "BLOQUEADO" || "$REVIEW_CODEX_VERDICT" == "BLOQUEADO" ]]; then
+    REVIEW_FINAL_VERDICT="BLOQUEADO"
+    return 0
+  fi
+
+  if [[ "$REVIEW_CLAUDE_VERDICT" == "REVISAR" || "$REVIEW_CODEX_VERDICT" == "REVISAR" ]]; then
+    REVIEW_FINAL_VERDICT="REVISAR"
+    return 0
+  fi
+
+  if [[ "$REVIEW_CLAUDE_VERDICT" == "APROBADO" && "$REVIEW_CODEX_VERDICT" == "APROBADO" ]]; then
+    REVIEW_FINAL_VERDICT="APROBADO"
+    return 0
+  fi
+
+  REVIEW_FINAL_VERDICT=""
+  return 0
+}
+
+confirm_or_abort() {
+  local message="$1"
+  echo "$message"
+  read -r answer < /dev/tty
+  [[ "$answer" =~ ^[sS]$ ]]
+}
+
+handle_review_verdict_for_merge() {
+  case "$REVIEW_FINAL_VERDICT" in
+    APROBADO)
+      if ! run_checks; then
+        git merge --abort
+        exit 5
+      fi
+      git commit --no-edit
+      echo "✅  Merge confirmado."
+      return 0
+      ;;
+    REVISAR)
+      if [[ "$AUTO_MODE" == true ]]; then
+        git merge --abort
+        echo "⚠️  REVISAR detectado en modo --auto. Merge cancelado."
+        exit 2
+      fi
+      if confirm_or_abort "⚠️  Hay observaciones. ¿Confirmar el merge? [s/N]"; then
+        if ! run_checks; then
+          git merge --abort
+          exit 5
+        fi
+        git commit --no-edit
+        echo "✅  Merge confirmado."
+      else
+        git merge --abort
+        echo "↩️   Merge cancelado."
+      fi
+      return 0
+      ;;
+    BLOQUEADO)
+      git merge --abort
+      echo "❌  BLOQUEADO — Merge cancelado. Revisa los cambios fuera de scope."
+      exit 3
+      ;;
+    *)
+      if [[ "$AUTO_MODE" == true ]]; then
+        git merge --abort
+        echo "⚠️  Veredicto no claro en modo --auto. Merge cancelado."
+        exit 4
+      fi
+      if confirm_or_abort "⚠️  Veredicto no claro. ¿Confirmar el merge? [s/N]"; then
+        if ! run_checks; then
+          git merge --abort
+          exit 5
+        fi
+        git commit --no-edit
+      else
+        git merge --abort
+        echo "↩️   Merge cancelado."
+      fi
+      return 0
+      ;;
+  esac
+}
+
+CLAUDE_BIN="${CLAUDE_BIN:-/Users/josemaria/.local/bin/claude}"
+CODEX_BIN="${CODEX_BIN:-$(command -v codex 2>/dev/null || true)}"
 BRANCH=""
 DRY_RUN=false
 AUTO_MODE=false
@@ -123,7 +279,7 @@ if [[ "$DRY_RUN" == true ]]; then
   echo "🔍  Modo dry-run: analizando sin mergear..."
   echo ""
 
-  PROMPT="Eres un revisor de código. Analiza si este merge es seguro ANTES de ejecutarlo.
+  BASE_PROMPT="Eres un revisor de código. Analiza si este merge es seguro ANTES de ejecutarlo.
 
 ## Rama a mergear: $BRANCH → $CURRENT_BRANCH
 
@@ -145,22 +301,16 @@ $DIFF_BRANCH
 \`\`\`
 
 Responde:
-
 ### ✅ Cambios que corresponden a la tarea
 ### ⚠️ Cambios no declarados o fuera de scope
 ### ❌ Riesgos o efectos secundarios detectados
 ### 📋 Veredicto
 APROBADO, REVISAR o BLOQUEADO (una sola palabra al final)"
 
-  report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null || true)
-  verdict=$(extract_verdict "$report")
-
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "$report"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  run_dual_review "$BASE_PROMPT"
 
   if [[ "$AUTO_MODE" == true ]]; then
-    case "$verdict" in
+    case "$REVIEW_FINAL_VERDICT" in
       APROBADO) exit 0 ;;
       REVISAR) exit 2 ;;
       BLOQUEADO) exit 3 ;;
@@ -179,12 +329,12 @@ set -e
 CONFLICTS=$(git diff --name-only --diff-filter=U 2>/dev/null)
 
 if [[ $MERGE_EXIT -eq 0 && -z "$CONFLICTS" ]]; then
-  echo "✅  Merge sin conflictos. Verificando scope con Claude..."
+  echo "✅  Merge sin conflictos. Verificando scope con doble revisión..."
   echo ""
 
   STAGED_DIFF=$(capture "git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock'" 10000)
 
-  PROMPT="El merge se aplicó sin conflictos. Verifica que los cambios son exactamente lo declarado.
+  BASE_PROMPT="El merge se aplicó sin conflictos. Verifica que los cambios son exactamente lo declarado.
 
 ## Fuente de verdad
 commit
@@ -203,68 +353,9 @@ Responde:
 ### ❌ Riesgos
 ### 📋 Veredicto (APROBADO / REVISAR / BLOQUEADO)"
 
-  report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null || true)
-  verdict=$(extract_verdict "$report")
-
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "$report"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  run_dual_review "$BASE_PROMPT"
   echo ""
-
-  case "$verdict" in
-    APROBADO)
-      if ! run_checks; then
-        git merge --abort
-        exit 5
-      fi
-      git commit --no-edit
-      echo "✅  Merge confirmado."
-      ;;
-    REVISAR)
-      if [[ "$AUTO_MODE" == true ]]; then
-        git merge --abort
-        echo "⚠️  REVISAR detectado en modo --auto. Merge cancelado."
-        exit 2
-      fi
-      echo "⚠️  Hay cambios menores no declarados. ¿Confirmar el merge? [s/N]"
-      read -r answer < /dev/tty
-      if [[ "$answer" =~ ^[sS]$ ]]; then
-        if ! run_checks; then
-          git merge --abort
-          exit 5
-        fi
-        git commit --no-edit
-        echo "✅  Merge confirmado."
-      else
-        git merge --abort
-        echo "↩️   Merge cancelado."
-      fi
-      ;;
-    BLOQUEADO)
-      git merge --abort
-      echo "❌  BLOQUEADO — Merge cancelado. Revisa los cambios fuera de scope."
-      exit 3
-      ;;
-    *)
-      if [[ "$AUTO_MODE" == true ]]; then
-        git merge --abort
-        echo "⚠️  Veredicto no claro en modo --auto. Merge cancelado."
-        exit 4
-      fi
-      echo "⚠️  Veredicto no claro. ¿Confirmar el merge? [s/N]"
-      read -r answer < /dev/tty
-      if [[ "$answer" =~ ^[sS]$ ]]; then
-        if ! run_checks; then
-          git merge --abort
-          exit 5
-        fi
-        git commit --no-edit
-      else
-        git merge --abort
-        echo "↩️   Merge cancelado."
-      fi
-      ;;
-  esac
+  handle_review_verdict_for_merge
   exit 0
 fi
 
@@ -306,7 +397,7 @@ $conflict_content
 2. Elimina TODOS los marcadores de conflicto (<<<<<<<, =======, >>>>>>>)
 3. Devuelve ÚNICAMENTE el contenido resuelto del archivo, sin explicaciones, sin markdown, sin bloques de código, sin nada más — solo el contenido exacto del archivo."
 
-    resolved=$("$CLAUDE" --print "$PROMPT" 2>/dev/null || true)
+    resolved=$(run_claude "$PROMPT" || true)
 
     if [[ -z "$resolved" ]]; then
       echo "   ⚠️  No se pudo resolver '$file' automáticamente."
@@ -337,10 +428,10 @@ $conflict_content
     exit 1
   fi
 
-  echo "🔍  Verificación final del merge resuelto..."
+  echo "🔍  Verificación final del merge resuelto (doble revisión)..."
   FINAL_DIFF=$(capture "git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)*.lock'" 10000)
 
-  PROMPT="Verificación final post-resolución de conflictos.
+  BASE_PROMPT="Verificación final post-resolución de conflictos.
 
 ## Fuente de verdad
 commit
@@ -360,60 +451,7 @@ Responde:
 ### ⚠️ Posibles residuos fuera de scope
 ### 📋 Veredicto (APROBADO / REVISAR / BLOQUEADO)"
 
-  report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null || true)
-  verdict=$(extract_verdict "$report")
-
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "$report"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  run_dual_review "$BASE_PROMPT"
   echo ""
-
-  case "$verdict" in
-    APROBADO|REVISAR)
-      if [[ "$verdict" == "REVISAR" && "$AUTO_MODE" == true ]]; then
-        git merge --abort
-        echo "⚠️  REVISAR detectado en verificación final (modo --auto). Merge cancelado."
-        exit 2
-      fi
-      if [[ "$verdict" == "REVISAR" ]]; then
-        echo "⚠️  Hay observaciones. ¿Confirmar igualmente? [s/N]"
-        read -r answer < /dev/tty
-        if [[ ! "$answer" =~ ^[sS]$ ]]; then
-          git merge --abort
-          echo "↩️   Merge cancelado."
-          exit 1
-        fi
-      fi
-      if ! run_checks; then
-        git merge --abort
-        exit 5
-      fi
-      git commit --no-edit
-      echo "✅  Merge con resolución inteligente confirmado."
-      ;;
-    BLOQUEADO)
-      git merge --abort
-      echo "❌  BLOQUEADO — La resolución introdujo cambios fuera de scope. Merge cancelado."
-      exit 3
-      ;;
-    *)
-      if [[ "$AUTO_MODE" == true ]]; then
-        git merge --abort
-        echo "⚠️  Veredicto no claro en verificación final (modo --auto). Merge cancelado."
-        exit 4
-      fi
-      echo "⚠️  Veredicto no claro. ¿Confirmar el merge? [s/N]"
-      read -r answer < /dev/tty
-      if [[ "$answer" =~ ^[sS]$ ]]; then
-        if ! run_checks; then
-          git merge --abort
-          exit 5
-        fi
-        git commit --no-edit
-      else
-        git merge --abort
-        echo "↩️   Merge cancelado."
-      fi
-      ;;
-  esac
+  handle_review_verdict_for_merge
 fi

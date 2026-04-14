@@ -20,5 +20,7 @@ echo "  bash scripts/smart-merge.sh <rama> --require-checks — exige checks té
 echo "  bash scripts/smart-merge-all.sh main         — procesa todas las ramas candidatas"
 echo "  bash scripts/smart-merge-all.sh main --dry-run — pre-analiza sin mergear"
 echo ""
-echo "Requisito: claude CLI en /Users/josemaria/.local/bin/claude"
+echo "Requisitos:"
+echo "  - Claude CLI (default: /Users/josemaria/.local/bin/claude)"
+echo "  - Codex CLI accesible en PATH (o export CODEX_BIN=/ruta/codex)"
 echo "Para saltar la revisión puntualmente: git push --no-verify"

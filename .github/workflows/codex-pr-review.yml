@@ -1,9 +1,9 @@
 name: Codex PR Review
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: ["Claude PR Review"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -11,22 +11,41 @@ permissions:
 
 jobs:
   codex-review:
-    name: Codex · Revisión de cambios
+    name: Codex · Segunda revisión de cambios
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
 
     steps:
+      - name: Resolver número de PR
+        id: pr
+        run: |
+          PR_NUMBER=$(jq -r '.workflow_run.pull_requests[0].number // empty' "$GITHUB_EVENT_PATH")
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No hay PR asociada al workflow_run."
+            echo "has_pr=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_pr=true" >> "$GITHUB_OUTPUT"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
+        if: steps.pr.outputs.has_pr == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Recopilar contexto de la PR
-        id: context
+        if: steps.pr.outputs.has_pr == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q '.title')
-          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q '.body // "Sin descripción"')
+          PR_NUMBER='${{ steps.pr.outputs.number }}'
+
+          git fetch origin main --depth=1
+
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --json title -q '.title')
+          PR_BODY=$(gh pr view "$PR_NUMBER" --json body -q '.body // "Sin descripción"')
           COMMITS=$(git log origin/main..HEAD --pretty=format:"- %h %s%n  %b" --no-merges)
           FILES_CHANGED=$(git diff --name-status origin/main...HEAD)
           DIFF=$(git diff origin/main...HEAD -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' | head -c 12000)
@@ -49,12 +68,14 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_ENV"
 
-      - name: Codex · Analizar PR
+      - name: Codex · Auditar revisión de Claude y PR
+        if: steps.pr.outputs.has_pr == 'true'
         uses: openai/codex-action@v1
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           prompt: |
-            Eres un revisor de código técnico. Tu misión es verificar que los cambios de esta PR son exactamente lo que se declara, ni más ni menos.
+            Eres el segundo revisor técnico. Claude ya revisó esta PR en un workflow previo.
+            Tu tarea es validar que la PR está alineada al scope y detectar omisiones que un primer revisor podría haber pasado por alto.
 
             ## PR: ${{ env.PR_TITLE }}
 
@@ -74,33 +95,16 @@ jobs:
 
             ---
 
-            ## Tu análisis debe responder estas preguntas:
-
-            **1. ¿El código cambiado corresponde a lo descrito?**
-            Compara cada cambio real con lo que dice la descripción de la tarea. ¿Hay algo implementado que no se menciona? ¿Falta algo que sí se menciona?
-
-            **2. ¿Hay cambios fuera del scope declarado?**
-            Identifica archivos o lógica modificada que no tenga relación directa con la tarea. Considera especialmente: configuración, dependencias, estilos globales, utilidades compartidas.
-
-            **3. ¿Hay efectos secundarios potenciales?**
-            ¿Algún cambio podría afectar a otras partes del sistema no mencionadas?
-
-            ---
+            Evalúa explícitamente:
+            1. Si los cambios implementados corresponden exactamente a la tarea.
+            2. Si hay cambios fuera de scope o efectos secundarios.
+            3. Qué puntos de riesgo suelen omitirse en una primera revisión (config, scripts, CI, seguridad, regresiones de UI/UX).
 
             ## Formato de respuesta
-
-            ### ✅ Cambios que corresponden a la descripción
-            Lista lo que está bien alineado.
-
+            ### ✅ Cambios que corresponden
             ### ⚠️ Cambios no declarados o dudosos
-            Lista cambios presentes en el código que no aparecen en la descripción de la tarea.
-
             ### ❌ Discrepancias o riesgos
-            Cambios que contradicen la descripción o podrían romper otras cosas.
-
             ### 📋 Veredicto
-            **APROBADO** — Los cambios son fieles a la tarea descrita.
-            **REVISAR** — Hay cambios menores no declarados, pero no críticos.
-            **BLOQUEADO** — Hay cambios significativos fuera del scope o discrepancias graves.
+            **APROBADO** / **REVISAR** / **BLOQUEADO**
 
-            Sé directo y conciso. No repitas el diff completo.
+            Sé directo y conciso.

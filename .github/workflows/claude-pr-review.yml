@@ -1,0 +1,88 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  claude-review:
+    name: Claude · Primera revisión de cambios
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Recopilar contexto de la PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q '.title')
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q '.body // "Sin descripción"')
+          COMMITS=$(git log origin/main..HEAD --pretty=format:"- %h %s%n  %b" --no-merges)
+          FILES_CHANGED=$(git diff --name-status origin/main...HEAD)
+          DIFF=$(git diff origin/main...HEAD -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' | head -c 12000)
+
+          {
+            echo "PR_TITLE<<EOF"
+            echo "$PR_TITLE"
+            echo "EOF"
+            echo "PR_BODY<<EOF"
+            echo "$PR_BODY"
+            echo "EOF"
+            echo "COMMITS<<EOF"
+            echo "$COMMITS"
+            echo "EOF"
+            echo "FILES_CHANGED<<EOF"
+            echo "$FILES_CHANGED"
+            echo "EOF"
+            echo "DIFF<<EOF"
+            echo "$DIFF"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Claude · Analizar PR
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Eres un revisor de código técnico. Tu misión es verificar que los cambios de esta PR son exactamente lo que se declara, ni más ni menos.
+
+            ## PR: ${{ env.PR_TITLE }}
+
+            ### Descripción de la tarea / backlog
+            ${{ env.PR_BODY }}
+
+            ### Commits incluidos
+            ${{ env.COMMITS }}
+
+            ### Archivos modificados
+            ${{ env.FILES_CHANGED }}
+
+            ### Diff del código
+            ```diff
+            ${{ env.DIFF }}
+            ```
+
+            ---
+
+            ## Tu análisis debe responder estas preguntas:
+            1. ¿El código cambiado corresponde a lo descrito?
+            2. ¿Hay cambios fuera del scope declarado?
+            3. ¿Hay efectos secundarios potenciales?
+
+            ## Formato de respuesta
+            ### ✅ Cambios que corresponden a la descripción
+            ### ⚠️ Cambios no declarados o dudosos
+            ### ❌ Discrepancias o riesgos
+            ### 📋 Veredicto
+            **APROBADO** / **REVISAR** / **BLOQUEADO**
+
+            Sé directo y conciso.

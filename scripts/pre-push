@@ -1,18 +1,50 @@
 #!/usr/bin/env bash
-# pre-push hook: Claude scope review
+# pre-push hook: doble revisión Claude + Codex
 # Verifica que lo que se sube corresponde al commit message declarado.
 # Veredictos: APROBADO (continúa), REVISAR (pregunta), BLOQUEADO (cancela).
 
-CLAUDE=/Users/josemaria/.local/bin/claude
+set -euo pipefail
 
-# ── Leer commits que se van a subir ──────────────────────────────────────────
+CLAUDE_BIN="${CLAUDE_BIN:-/Users/josemaria/.local/bin/claude}"
+CODEX_BIN="${CODEX_BIN:-$(command -v codex 2>/dev/null || true)}"
+
+extract_verdict() {
+  { echo "$1" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1; } || true
+}
+
+confirm_continue() {
+  local msg="$1"
+  echo "$msg"
+  echo "   ¿Continuar el push? [s/N]"
+  read -r answer < /dev/tty
+  [[ "$answer" =~ ^[sS]$ ]]
+}
+
+run_claude_review() {
+  local prompt="$1"
+  "$CLAUDE_BIN" --print "$prompt" 2>/dev/null || true
+}
+
+run_codex_review() {
+  local prompt="$1"
+  local out_file
+  out_file=$(mktemp)
+
+  if ! printf "%s" "$prompt" | "$CODEX_BIN" exec --sandbox read-only --output-last-message "$out_file" - >/dev/null 2>&1; then
+    rm -f "$out_file"
+    return 1
+  fi
+
+  cat "$out_file"
+  rm -f "$out_file"
+}
+
 remote="$1"
 remote_url="$2"
 
 commits_to_push=""
 range=""
-while read local_ref local_sha remote_ref remote_sha; do
-  # Si la rama no existe en remoto aún, comparar con la base del repo
+while read -r local_ref local_sha remote_ref remote_sha; do
   if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]]; then
     base=$(git merge-base HEAD origin/HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD)
     range="$base...$local_sha"
@@ -24,24 +56,17 @@ while read local_ref local_sha remote_ref remote_sha; do
 done
 
 if [[ -z "$(echo "$commits_to_push" | tr -d '[:space:]')" ]]; then
-  exit 0  # Nada nuevo que subir
+  exit 0
 fi
 
-# ── Recopilar diff y contexto ─────────────────────────────────────────────────
 files_changed=$({ git diff --name-status "$range" || true; } 2>/dev/null | head -60)
 diff_content=$({ git diff "$range" -- . \
   ':(exclude)package-lock.json' \
   ':(exclude)yarn.lock' \
   ':(exclude)*.lock' || true; } 2>/dev/null | head -c 10000)
-
 last_commit_msg=$(git log -1 --pretty=format:"%s%n%n%b")
 
-# ── Llamar a Claude ────────────────────────────────────────────────────────────
-echo ""
-echo "🤖  Claude revisando el push..."
-echo ""
-
-PROMPT="Eres un revisor de código técnico. Verifica que los cambios que se van a subir corresponden exactamente a lo declarado en el commit.
+BASE_PROMPT="Eres un revisor de código técnico. Verifica que los cambios que se van a subir corresponden exactamente a lo declarado en el commit.
 
 ## Tarea declarada (commit message)
 $last_commit_msg
@@ -81,42 +106,119 @@ Criterio:
 - REVISAR: hay cambios menores no declarados pero no críticos
 - BLOQUEADO: cambios fuera de scope o discrepancias graves"
 
-report=$("$CLAUDE" --print "$PROMPT" 2>/dev/null)
+echo ""
+echo "🤖  Claude revisando el push..."
+echo ""
 
-if [[ $? -ne 0 || -z "$report" ]]; then
-  echo "⚠️  No se pudo contactar con Claude. ¿Continuar el push? [s/N]"
-  read -r answer < /dev/tty
-  [[ "$answer" =~ ^[sS]$ ]] && exit 0 || exit 1
+if [[ ! -x "$CLAUDE_BIN" ]]; then
+  if confirm_continue "⚠️  Claude CLI no está disponible en '$CLAUDE_BIN'."; then
+    exit 0
+  fi
+  exit 1
 fi
 
-# ── Mostrar informe ────────────────────────────────────────────────────────────
+claude_report=$(run_claude_review "$BASE_PROMPT")
+if [[ -z "$claude_report" ]]; then
+  if confirm_continue "⚠️  No se pudo obtener informe de Claude."; then
+    exit 0
+  fi
+  exit 1
+fi
+
+claude_verdict=$(extract_verdict "$claude_report")
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "$report"
+echo "### Claude"
+echo "$claude_report"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# ── Parsear veredicto (última línea no vacía) ─────────────────────────────────
-verdict=$(echo "$report" | grep -oE 'APROBADO|REVISAR|BLOQUEADO' | tail -1)
+if [[ -z "$CODEX_BIN" ]]; then
+  if confirm_continue "⚠️  Codex CLI no está disponible en PATH."; then
+    case "$claude_verdict" in
+      APROBADO) exit 0 ;;
+      REVISAR) confirm_continue "⚠️  REVISAR de Claude." && exit 0 || exit 1 ;;
+      BLOQUEADO) echo "❌  BLOQUEADO por Claude."; exit 1 ;;
+      *) exit 1 ;;
+    esac
+  fi
+  exit 1
+fi
 
-case "$verdict" in
-  APROBADO)
-    echo "✅  APROBADO — Push continuando."
+echo "🤖  Codex auditando el informe de Claude..."
+echo ""
+
+CODEX_PROMPT="Eres un segundo revisor técnico. Debes auditar tanto el diff como el informe previo de Claude para validar su calidad y detectar omisiones.
+
+## Tarea declarada (commit message)
+$last_commit_msg
+
+## Commits incluidos en el push
+$commits_to_push
+
+## Archivos modificados
+$files_changed
+
+## Diff del código
+\`\`\`diff
+$diff_content
+\`\`\`
+
+## Informe previo de Claude
+$claude_report
+
+---
+
+Valida explícitamente si el informe de Claude es correcto o si omitió algo.
+
+Responde con este formato exacto:
+
+### ✅ Coincidencias correctas (incluyendo validación de Claude)
+### ⚠️ Omisiones o dudas detectadas (incluyendo posibles fallos del informe de Claude)
+### ❌ Riesgos o discrepancias graves
+### 📋 Veredicto
+Última línea: APROBADO o REVISAR o BLOQUEADO"
+
+codex_report=$(run_codex_review "$CODEX_PROMPT" || true)
+if [[ -z "$codex_report" ]]; then
+  if confirm_continue "⚠️  No se pudo obtener informe de Codex."; then
+    case "$claude_verdict" in
+      APROBADO) exit 0 ;;
+      REVISAR) confirm_continue "⚠️  REVISAR de Claude." && exit 0 || exit 1 ;;
+      BLOQUEADO) echo "❌  BLOQUEADO por Claude."; exit 1 ;;
+      *) exit 1 ;;
+    esac
+  fi
+  exit 1
+fi
+
+codex_verdict=$(extract_verdict "$codex_report")
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "### Codex"
+echo "$codex_report"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+if [[ "$claude_verdict" == "BLOQUEADO" || "$codex_verdict" == "BLOQUEADO" ]]; then
+  echo "❌  BLOQUEADO — Push cancelado por revisión AI."
+  echo "   Usa 'git push --no-verify' para saltarte la revisión puntualmente."
+  exit 1
+fi
+
+if [[ "$claude_verdict" == "REVISAR" || "$codex_verdict" == "REVISAR" ]]; then
+  if confirm_continue "⚠️  REVISAR — Alguno de los revisores detectó cambios dudosos."; then
     exit 0
-    ;;
-  REVISAR)
-    echo "⚠️  REVISAR — Hay cambios menores no declarados."
-    echo "   ¿Continuar el push? [s/N]"
-    read -r answer < /dev/tty
-    [[ "$answer" =~ ^[sS]$ ]] && exit 0 || exit 1
-    ;;
-  BLOQUEADO)
-    echo "❌  BLOQUEADO — Push cancelado."
-    echo "   Usa 'git push --no-verify' para saltarte la revisión."
-    exit 1
-    ;;
-  *)
-    echo "⚠️  No se encontró veredicto claro. ¿Continuar el push? [s/N]"
-    read -r answer < /dev/tty
-    [[ "$answer" =~ ^[sS]$ ]] && exit 0 || exit 1
-    ;;
-esac
+  fi
+  exit 1
+fi
+
+if [[ "$claude_verdict" == "APROBADO" && "$codex_verdict" == "APROBADO" ]]; then
+  echo "✅  APROBADO por Claude y Codex — Push continuando."
+  exit 0
+fi
+
+if confirm_continue "⚠️  Veredicto no claro de alguno de los revisores."; then
+  exit 0
+fi
+exit 1

@@ -60,14 +60,14 @@ LOGIN_REDIRECT_URL = '/dashboard/'
 LOGOUT_REDIRECT_URL = '/login/'
 ```
 
-## Merge Guardrails (Claude-assisted)
+## Merge Guardrails (Claude + Codex)
 
-This repo uses local guardrails to verify merge scope before integrating branches.
+This repo uses local guardrails to verify merge scope before integrating branches with double AI review.
 
 ### Components
 
-- `scripts/pre-push`: git hook that asks Claude to compare commit intent vs pushed diff.
-- `scripts/smart-merge.sh`: merge assistant for one branch (`--dry-run`, `--auto`, conflict resolution, scope validation).
+- `scripts/pre-push`: git hook that runs Claude first and Codex second over the same push diff.
+- `scripts/smart-merge.sh`: merge assistant for one branch (`--dry-run`, `--auto`, conflict resolution, scope validation with Claude + Codex).
 - `scripts/smart-merge-all.sh`: orchestrates multiple branch merges against a base branch (`main` by default).
 
 Install hook:
@@ -103,5 +103,6 @@ Behavior in `--auto`:
 ### Operational limits
 
 - Requires Claude CLI login and available credits.
-- If Claude is unavailable (login/limit), semantic validation cannot run.
+- Requires Codex CLI available in PATH (or `CODEX_BIN`) for second-pass validation.
+- If either reviewer is unavailable, scripts ask for explicit confirmation to continue (or abort automatically in strict `--auto` paths).
 - `--require-checks` runs technical checks before final merge commit (default command in `smart-merge.sh`).
