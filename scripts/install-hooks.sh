@@ -19,6 +19,7 @@ echo "  bash scripts/smart-merge.sh <rama> --dry-run — analiza el merge sin ej
 echo "  bash scripts/smart-merge.sh <rama> --require-checks — exige checks técnicos"
 echo "  bash scripts/smart-merge-all.sh main         — procesa todas las ramas candidatas"
 echo "  bash scripts/smart-merge-all.sh main --dry-run — pre-analiza sin mergear"
+echo "  bash scripts/merge-with-main.sh <rama1> <rama2> [--claude-only] — flujo completo de merge a main"
 echo ""
 echo "Requisitos:"
 echo "  - Claude CLI (default: /Users/josemaria/.local/bin/claude)"

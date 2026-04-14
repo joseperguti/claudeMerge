@@ -1,0 +1,124 @@
+name: Claude Issue Worker
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+# Required setup for full execution:
+# 1) Install Claude GitHub App on this repository: https://github.com/apps/claude
+# 2) Add repository secret: ANTHROPIC_API_KEY
+#
+# Safe behavior:
+# - If ANTHROPIC_API_KEY is missing, workflow posts guidance comment and exits.
+# - Workflow never merges, pushes, or closes issues automatically.
+
+jobs:
+  claude_issue_worker:
+    name: Claude · Work from issue
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request == null
+
+    steps:
+      - name: Check Claude config
+        id: cfg
+        run: |
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment missing setup
+        if: steps.cfg.outputs.enabled != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '## Claude Issue Worker',
+              '',
+              'No pude iniciar trabajo automático porque falta configuración.',
+              '',
+              'Requisitos:',
+              '- Secret `ANTHROPIC_API_KEY` en el repositorio.',
+              '- Claude GitHub App instalada en este repo: https://github.com/apps/claude',
+              '',
+              'Mientras tanto, ejecuta Claude en terminal para trabajar este issue manualmente.'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Checkout
+        if: steps.cfg.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude analyze issue
+        if: steps.cfg.outputs.enabled == 'true'
+        id: claude
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Eres un asistente técnico para un proyecto Django.
+
+            Se ha creado un issue nuevo y debes empezar el trabajo de forma segura.
+            No hagas merge, no hagas push y no cierres el issue automáticamente.
+
+            Issue #${{ github.event.issue.number }}
+            Título: ${{ github.event.issue.title }}
+
+            Descripción:
+            ${{ github.event.issue.body }}
+
+            Produce una respuesta corta y operativa con este formato:
+            1) Comprensión del issue
+            2) Plan técnico en 3-6 pasos
+            3) Riesgos/validaciones necesarias
+            4) Primeros archivos a tocar
+            5) Estado: EN_PROGRESO
+
+      - name: Comment in issue (Claude)
+        if: steps.cfg.outputs.enabled == 'true'
+        uses: actions/github-script@v7
+        env:
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          CLAUDE_RESPONSE: ${{ steps.claude.outputs.response }}
+        with:
+          script: |
+            const outcome = process.env.CLAUDE_OUTCOME || 'skipped';
+            const response = (process.env.CLAUDE_RESPONSE || '').trim();
+
+            let body;
+            if (outcome !== 'success') {
+              body = [
+                '## Claude Issue Worker',
+                '',
+                'No pude completar el arranque automático en CI para este issue.',
+                'Revisa logs del workflow y verifica la app/secret de Claude.',
+                '',
+                'Sugerencia: ejecutar Claude en terminal para continuar manualmente.'
+              ].join('\n');
+            } else {
+              body = response.length > 0
+                ? `## Claude Issue Worker\n\n${response}`
+                : '## Claude Issue Worker\n\nClaude ejecutó el job pero no devolvió salida estructurada; revisa logs.';
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
