@@ -8,164 +8,16 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  id-token: write
 
 # Required repository secrets:
-# - ANTHROPIC_API_KEY: for Claude review job
 # - OPENAI_API_KEY: for Codex review job
 #
 # Notes:
 # - This workflow only reviews and comments on PRs.
 # - It does NOT merge, approve, reject, push, or auto-fix code.
+# - Claude review is local-only (run in terminal before merge).
 
 jobs:
-  claude_review:
-    name: Claude · PR review
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Build PR context
-        id: context
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER='${{ github.event.pull_request.number }}'
-
-          PR_TITLE=$(gh pr view "$PR_NUMBER" --json title -q '.title')
-          PR_BODY=$(gh pr view "$PR_NUMBER" --json body -q '.body // "Sin descripción"')
-          COMMITS=$(git log origin/main..HEAD --pretty=format:"- %h %s%n  %b" --no-merges)
-          FILES_CHANGED=$(git diff --name-status origin/main...HEAD)
-          DIFF=$(git diff origin/main...HEAD -- . \
-            ':(exclude)package-lock.json' \
-            ':(exclude)yarn.lock' \
-            ':(exclude)*.lock' | head -c 15000)
-
-          {
-            echo "PR_TITLE<<EOF"
-            echo "$PR_TITLE"
-            echo "EOF"
-            echo "PR_BODY<<EOF"
-            echo "$PR_BODY"
-            echo "EOF"
-            echo "COMMITS<<EOF"
-            echo "$COMMITS"
-            echo "EOF"
-            echo "FILES_CHANGED<<EOF"
-            echo "$FILES_CHANGED"
-            echo "EOF"
-            echo "DIFF<<EOF"
-            echo "$DIFF"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
-
-      - name: Check Claude config
-        id: claude_config
-        run: |
-          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Claude analyze
-        id: claude
-        if: steps.claude_config.outputs.enabled == 'true'
-        continue-on-error: true
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            Eres revisor técnico de PRs para un proyecto Django.
-
-            Objetivo:
-            - Verificar que el PR coincide con el diff real.
-            - Detectar cambios funcionales no descritos y colaterales.
-            - Señalar riesgos evidentes antes de merge.
-
-            Zonas sensibles del repo:
-            - templates/**
-            - templates/accounts/dashboard.html
-            - accounts/**
-            - mysite/**
-            - scripts/ de merge/push
-
-            Riesgos prioritarios:
-            - innerHTML con contenido dinámico
-            - querySelector/selectores construidos con input no validado
-            - conflictos de merge mal resueltos
-            - refactors visuales que rompen funcionalidad
-            - mezcla HTML/CSS/JS con cambios no descritos
-
-            PR: ${{ env.PR_TITLE }}
-
-            Descripción:
-            ${{ env.PR_BODY }}
-
-            Commits:
-            ${{ env.COMMITS }}
-
-            Archivos modificados:
-            ${{ env.FILES_CHANGED }}
-
-            Diff:
-            ```diff
-            ${{ env.DIFF }}
-            ```
-
-            Formato de salida obligatorio:
-            1) Resumen real del cambio
-            2) Coincidencia entre PR y diff
-            3) Riesgos detectados
-            4) Ajustes sugeridos
-            5) Veredicto: OK / AJUSTAR / BLOQUEAR
-
-      - name: Comment in PR (Claude)
-        uses: actions/github-script@v7
-        env:
-          # TODO: verify exact output key exposed by anthropics/claude-code-action@v1.
-          # If it differs from `response`, this step will publish a fallback message.
-          CLAUDE_ENABLED: ${{ steps.claude_config.outputs.enabled }}
-          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
-          CLAUDE_REVIEW_TEXT: ${{ steps.claude.outputs.response }}
-        with:
-          script: |
-            const raw = (process.env.CLAUDE_REVIEW_TEXT || '').trim();
-            const enabled = process.env.CLAUDE_ENABLED === 'true';
-            const outcome = process.env.CLAUDE_OUTCOME || 'skipped';
-            let body;
-
-            if (!enabled) {
-              body = [
-                '## Claude Review',
-                '',
-                'Claude review omitida en CI: falta `ANTHROPIC_API_KEY` en los secrets del repositorio.',
-                'Puedes ejecutar Claude en local (terminal) para revisión manual complementaria.'
-              ].join('\n');
-            } else if (outcome !== 'success') {
-              body = [
-                '## Claude Review',
-                '',
-                'Claude review no pudo completarse en CI (job no bloqueante).',
-                'Revisa logs del job y verifica instalación de la app de Claude en el repositorio.'
-              ].join('\n');
-            } else {
-              body = raw.length > 0
-                ? `## Claude Review\n\n${raw}`
-                : '## Claude Review\n\nNo se pudo recuperar salida estructurada de la action. Revisa los logs del job.';
-            }
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body,
-            });
-
   codex_review:
     name: Codex · PR review
     runs-on: ubuntu-latest

@@ -71,5 +71,4 @@ Final merge decisions should be enforced through PR checks and branch protection
 ## CI Review Mode (Current)
 
 - `Codex · PR review`: blocking check in GitHub branch protection.
-- `Claude · PR review`: non-blocking fallback in CI when `ANTHROPIC_API_KEY` is missing or Claude app is not installed.
-- Recommended: run Claude in local terminal before merge when CI Claude is unavailable.
+- Claude review: local only. Run in terminal before merge for a complementary review.
