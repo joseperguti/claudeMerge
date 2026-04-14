@@ -78,6 +78,18 @@ bash scripts/install-hooks.sh
 
 ### Recommended merge flow
 
+Quick one-command flow (2 branches -> `main`):
+
+```bash
+bash scripts/merge-with-main.sh feature/landing-templates-redesign feature/landing-js-animations-funcionalidades
+```
+
+If you want local validation with Claude only (without local Codex second pass):
+
+```bash
+bash scripts/merge-with-main.sh feature/landing-templates-redesign feature/landing-js-animations-funcionalidades --claude-only
+```
+
 1. Pre-analyze candidate branches:
 
 ```bash
