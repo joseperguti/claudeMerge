@@ -408,7 +408,12 @@ body { background: var(--black); color: var(--white); }
         if (!toastStack) return;
         const toast = document.createElement('div');
         toast.className = 'toast';
-        toast.innerHTML = '<strong>' + title + '</strong><p>' + message + '</p>';
+        const strong = document.createElement('strong');
+        strong.textContent = title;
+        const p = document.createElement('p');
+        p.textContent = message;
+        toast.appendChild(strong);
+        toast.appendChild(p);
         toastStack.appendChild(toast);
         requestAnimationFrame(() => toast.classList.add('show'));
         setTimeout(() => {
@@ -609,6 +614,7 @@ body { background: var(--black); color: var(--white); }
 
     function switchTab(tab, options) {
         const opts = options || {};
+        if (!/^[\w-]+$/.test(String(tab || ''))) return;
         const currentPanel = document.querySelector('.tab-content.active');
         const nextPanel = document.querySelector('.tab-content[data-tab="' + tab + '"]');
         const targetBtn = document.querySelector('[data-tab-link="' + tab + '"]');
