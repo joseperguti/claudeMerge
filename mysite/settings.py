@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -63,6 +64,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'mysite.context_processors.ui_theme_settings',
             ],
         },
     },
@@ -117,6 +119,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# UI typography theme (overridable via environment variables).
+UI_FONT_FAMILY = os.getenv('UI_FONT_FAMILY', "'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif")
+DISPLAY_FONT_FAMILY = os.getenv('DISPLAY_FONT_FAMILY', "'Space Grotesk', 'IBM Plex Sans', sans-serif")
+GOOGLE_FONTS_URL = os.getenv(
+    'GOOGLE_FONTS_URL',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap',
+)
 
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/dashboard/'
