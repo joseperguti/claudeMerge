@@ -72,3 +72,13 @@ Final merge decisions should be enforced through PR checks and branch protection
 
 - `Codex · PR review`: blocking check in GitHub branch protection.
 - Claude review: local only. Run in terminal before merge for a complementary review.
+
+## Issue Automation (Claude)
+
+- Workflow: `.github/workflows/claude-issue-worker.yml`
+- Trigger: when an issue is opened/reopened.
+- Behavior: Claude posts a technical start-plan comment in the issue.
+- Safety: no auto-merge, no auto-push, no auto-close.
+- Requirements:
+  - Claude GitHub App installed in the repository.
+  - `ANTHROPIC_API_KEY` repository secret (if missing, workflow leaves guidance comment).
