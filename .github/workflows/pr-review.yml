@@ -63,8 +63,19 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_ENV"
 
+      - name: Check Claude config
+        id: claude_config
+        run: |
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Claude analyze
         id: claude
+        if: steps.claude_config.outputs.enabled == 'true'
+        continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -118,13 +129,35 @@ jobs:
         env:
           # TODO: verify exact output key exposed by anthropics/claude-code-action@v1.
           # If it differs from `response`, this step will publish a fallback message.
+          CLAUDE_ENABLED: ${{ steps.claude_config.outputs.enabled }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
           CLAUDE_REVIEW_TEXT: ${{ steps.claude.outputs.response }}
         with:
           script: |
             const raw = (process.env.CLAUDE_REVIEW_TEXT || '').trim();
-            const body = raw.length > 0
-              ? `## Claude Review\n\n${raw}`
-              : '## Claude Review\n\nNo se pudo recuperar salida estructurada de la action. Revisa los logs del job.';
+            const enabled = process.env.CLAUDE_ENABLED === 'true';
+            const outcome = process.env.CLAUDE_OUTCOME || 'skipped';
+            let body;
+
+            if (!enabled) {
+              body = [
+                '## Claude Review',
+                '',
+                'Claude review omitida en CI: falta `ANTHROPIC_API_KEY` en los secrets del repositorio.',
+                'Puedes ejecutar Claude en local (terminal) para revisión manual complementaria.'
+              ].join('\n');
+            } else if (outcome !== 'success') {
+              body = [
+                '## Claude Review',
+                '',
+                'Claude review no pudo completarse en CI (job no bloqueante).',
+                'Revisa logs del job y verifica instalación de la app de Claude en el repositorio.'
+              ].join('\n');
+            } else {
+              body = raw.length > 0
+                ? `## Claude Review\n\n${raw}`
+                : '## Claude Review\n\nNo se pudo recuperar salida estructurada de la action. Revisa los logs del job.';
+            }
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,

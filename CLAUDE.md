@@ -67,3 +67,9 @@ Verify that the PR description and commits match the actual diff.
 
 Scripts under `scripts/` are local utilities. They do not define final merge governance.
 Final merge decisions should be enforced through PR checks and branch protection in GitHub.
+
+## CI Review Mode (Current)
+
+- `Codex · PR review`: blocking check in GitHub branch protection.
+- `Claude · PR review`: non-blocking fallback in CI when `ANTHROPIC_API_KEY` is missing or Claude app is not installed.
+- Recommended: run Claude in local terminal before merge when CI Claude is unavailable.
