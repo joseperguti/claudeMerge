@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write
 
 # Required repository secrets:
 # - ANTHROPIC_API_KEY: for Claude review job
@@ -180,7 +181,7 @@ jobs:
         id: codex
         uses: openai/codex-action@v1
         with:
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt: |
             Eres revisor técnico de PRs para un proyecto Django.
 
