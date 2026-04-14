@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Mi Sitio{% endblock %}</title>
+    {% if GOOGLE_FONTS_URL %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="{{ GOOGLE_FONTS_URL }}" rel="stylesheet">
+    {% endif %}
     <style>
         * {
             margin: 0;
@@ -11,10 +16,22 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --font-ui: {{ UI_FONT_FAMILY|safe }};
+            --font-display: {{ DISPLAY_FONT_FAMILY|safe }};
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: var(--font-ui);
             background: #f0f2f5;
             color: #333;
+            font-optical-sizing: auto;
+            text-rendering: optimizeLegibility;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: var(--font-display);
+            letter-spacing: -0.02em;
         }
 
         .messages {
