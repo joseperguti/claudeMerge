@@ -463,6 +463,90 @@ body {
         font-size: clamp(26px, 9vw, 38px);
     }
 }
+
+.fx-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 20px;
+    flex-wrap: wrap;
+}
+
+.fx-btn {
+    background: var(--card);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 9px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: color .2s, border-color .2s, transform .2s;
+}
+
+.fx-btn:hover {
+    color: var(--ink);
+    border-color: var(--clay);
+    transform: translateY(-1px);
+}
+
+.fx-btn.active {
+    color: var(--forest);
+    border-color: var(--forest);
+    box-shadow: 0 0 12px rgba(31, 95, 83, .2);
+}
+
+.selected-plan-indicator {
+    font-size: 12px;
+    color: var(--muted);
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+.toast-stack {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.toast {
+    pointer-events: auto;
+    background: rgba(29, 27, 26, 0.94);
+    border: 1px solid var(--line);
+    color: var(--card);
+    border-radius: 10px;
+    padding: 12px 14px;
+    min-width: 260px;
+    max-width: 360px;
+    box-shadow: 0 10px 30px rgba(44, 30, 18, 0.3);
+    transform: translateY(8px);
+    opacity: 0;
+    transition: opacity .25s ease, transform .25s ease;
+}
+
+.toast.show { opacity: 1; transform: translateY(0); }
+
+.toast strong {
+    color: var(--forest-soft);
+    font-size: 12px;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.toast p { font-size: 13px; color: var(--sand); }
+
+@media (max-width: 900px) {
+    .fx-toolbar { margin-top: -6px; }
+    .selected-plan-indicator { width: 100%; }
+}
 {% endblock %}
 
 {% block content %}
@@ -475,12 +559,18 @@ body {
         </div>
     </nav>
 
-    <nav class="tabs-nav">
-        <a href="?tab=oferta1" class="tab-btn {% if tab == 'oferta1' %}active{% endif %}">Template Premium</a>
-        <a href="?tab=oferta2" class="tab-btn {% if tab == 'oferta2' %}active{% endif %}">Template Growth</a>
+    <nav class="tabs-nav" role="tablist" aria-label="Planes disponibles">
+        <a href="?tab=oferta1" class="tab-btn {% if tab == 'oferta1' %}active{% endif %}" data-tab-link="oferta1" role="tab" aria-selected="{% if tab == 'oferta1' %}true{% else %}false{% endif %}">Template Premium</a>
+        <a href="?tab=oferta2" class="tab-btn {% if tab == 'oferta2' %}active{% endif %}" data-tab-link="oferta2" role="tab" aria-selected="{% if tab == 'oferta2' %}true{% else %}false{% endif %}">Template Growth</a>
     </nav>
 
-    <section class="tab-content {% if tab == 'oferta1' %}active{% endif %}">
+    <div class="fx-toolbar">
+        <button type="button" class="fx-btn" data-fx-toggle="pause">Pausar efectos</button>
+        <button type="button" class="fx-btn" data-fx-toggle="reduced">Modo suave</button>
+        <div class="selected-plan-indicator" data-selected-plan>No has seleccionado un plan aun.</div>
+    </div>
+
+    <section class="tab-content {% if tab == 'oferta1' %}active{% endif %}" data-tab="oferta1" role="tabpanel">
         <div class="hero">
             <article class="hero-main">
                 <span class="badge">Template Principal</span>
@@ -539,7 +629,7 @@ body {
         </article>
     </section>
 
-    <section class="tab-content {% if tab == 'oferta2' %}active{% endif %}">
+    <section class="tab-content {% if tab == 'oferta2' %}active{% endif %}" data-tab="oferta2" role="tabpanel">
         <div class="hero">
             <article class="hero-main">
                 <span class="badge">Template Escalable</span>
