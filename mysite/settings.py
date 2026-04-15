@@ -121,6 +121,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
+
 # UI typography theme (overridable via environment variables).
 UI_FONT_FAMILY = os.getenv('UI_FONT_FAMILY', "'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif")
 DISPLAY_FONT_FAMILY = os.getenv('DISPLAY_FONT_FAMILY', "'Space Grotesk', 'IBM Plex Sans', sans-serif")
