@@ -1,0 +1,22 @@
+{
+  "name": "claudemerge",
+  "version": "1.0.0",
+  "description": "Frontend assets pipeline for claudeMerge Django project",
+  "private": true,
+  "scripts": {
+    "build": "gulp build",
+    "watch": "gulp watch",
+    "dev": "gulp"
+  },
+  "devDependencies": {
+    "gulp": "^4.0.2",
+    "gulp-sass": "^5.1.0",
+    "sass": "^1.77.6",
+    "gulp-clean-css": "^4.3.0",
+    "gulp-uglify": "^3.0.2",
+    "gulp-rename": "^2.0.0",
+    "gulp-sourcemaps": "^3.0.0",
+    "gulp-concat": "^2.6.0",
+    "del": "^6.1.1"
+  }
+}
