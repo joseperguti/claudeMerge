@@ -76,6 +76,13 @@ jobs:
             - Follow CLAUDE.md review and safety criteria.
             - Keep changes minimal and focused.
             - If the request is ambiguous, ask one concise clarifying question.
+            - If a branch must be created, use a descriptive branch name with this format:
+              <type>/issue-<number>-<short-kebab-description>
+              where <type> is one of: feat, fix, chore, refactor, docs, test.
+            - Branch name examples:
+              feat/issue-17-dashboard-pricing-textcontent
+              fix/issue-21-login-form-validation
+            - Avoid generic branch names (for example: update, changes, claude/issue-<n>).
 
             Safety rules:
             - Do NOT merge.
