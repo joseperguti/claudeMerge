@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 
-{% block title %}Iniciar Sesion{% endblock %}
+{% block title %}Iniciar Sesión — Mi Sitio{% endblock %}
+{% block meta_description %}Inicia sesión en Mi Sitio para acceder a las ofertas disponibles.{% endblock %}
+{% block og_title %}Iniciar Sesión — Mi Sitio{% endblock %}
+{% block og_description %}Inicia sesión en Mi Sitio para acceder a las ofertas disponibles.{% endblock %}
 
 {% block extra_styles %}
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -254,7 +257,7 @@ body { background: #0a0a0a; }
         </form>
 
         <div class="auth-footer">
-            No tienes cuenta? <a href="{% url 'register' %}">Registrate aqui</a>
+            ¿No tienes cuenta? <a href="{% url 'register' %}">Regístrate aquí</a>
         </div>
     </div>
 </div>
@@ -268,7 +271,7 @@ body { background: #0a0a0a; }
 
     /* ══ 2. TYPEWRITER en subtítulo ══ */
     const sub  = document.getElementById('cardSubtitle');
-    const text = 'Inicia sesion para continuar';
+    const text = 'Inicia sesión para continuar';
     let ti = 0;
     setTimeout(function type() {
         sub.textContent = text.slice(0, ti++) + (ti <= text.length ? '|' : '');
