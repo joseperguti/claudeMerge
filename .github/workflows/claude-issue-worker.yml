@@ -3,19 +3,20 @@ name: Claude Issue Worker
 on:
   issues:
     types: [opened, reopened]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
   issues: write
+  pull-requests: write
+  actions: read
 
 # Required repository secret:
-# - ANTHROPIC_API_KEY: Anthropic API key (https://console.anthropic.com/)
-# Optional repository variable:
-# - ANTHROPIC_MODEL: model name (default: claude-3-7-sonnet-latest)
+# - CLAUDE_CODE_OAUTH_TOKEN: generated locally with `claude setup-token`
 #
 # Safe behavior:
 # - Never merges, pushes, or closes issues automatically.
-# - If ANTHROPIC_API_KEY is missing, posts a guidance comment and exits.
 
 jobs:
   claude_issue_worker:
@@ -24,10 +25,10 @@ jobs:
     if: github.event.issue.pull_request == null
 
     steps:
-      - name: Check API key
+      - name: Check OAuth token
         id: cfg
         run: |
-          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+          if [ -n "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -38,131 +39,43 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
+            const issueNumber = context.payload.issue?.number;
+            if (!issueNumber) return;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body: [
                 '## Claude Issue Worker',
                 '',
-                'Falta el secret `ANTHROPIC_API_KEY` en el repositorio.',
-                'Añádelo en Settings → Secrets and variables → Actions.',
+                'Falta el secret `CLAUDE_CODE_OAUTH_TOKEN` en el repositorio.',
+                'Genéralo en terminal con `claude setup-token` y añádelo en Settings → Secrets and variables → Actions.',
               ].join('\n'),
             });
 
-      - name: Call Claude API
+      - name: Checkout repository
         if: steps.cfg.outputs.enabled == 'true'
-        id: claude
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-        run: |
-          set -euo pipefail
-
-          MODEL="${ANTHROPIC_MODEL:-claude-3-7-sonnet-latest}"
-          PROMPT="Eres un asistente técnico para un proyecto Django.
-
-          Se ha creado un issue nuevo. Analízalo y produce una respuesta operativa.
-          No hagas merge, no hagas push y no cierres el issue automáticamente.
-
-          Issue #${ISSUE_NUMBER}
-          Título: ${ISSUE_TITLE}
-
-          Descripción:
-          ${ISSUE_BODY}
-
-          Formato de respuesta:
-          1) Comprensión del issue
-          2) Plan técnico en 3-6 pasos
-          3) Riesgos y validaciones necesarias
-          4) Primeros archivos a tocar
-          5) Estado: EN_PROGRESO"
-
-          PAYLOAD="$(jq -n \
-            --arg prompt "$PROMPT" \
-            --arg model "$MODEL" \
-            '{
-              model: $model,
-              max_tokens: 1024,
-              messages: [{ role: "user", content: $prompt }]
-            }'
-          )"
-
-          HTTP_STATUS=$(curl -sS \
-            -o claude_response.json \
-            -w "%{http_code}" \
-            https://api.anthropic.com/v1/messages \
-            -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "$PAYLOAD")
-
-          echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
-
-          if [ "${HTTP_STATUS}" != "200" ]; then
-            ERROR_MSG="$(jq -r '.error.message // empty' claude_response.json)"
-            if [ -z "${ERROR_MSG}" ]; then
-              ERROR_MSG="$(jq -c '.' claude_response.json | head -c 800)"
-            fi
-            echo "claude_ok=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "claude_error<<EOF"
-              echo "${ERROR_MSG}"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          TEXT="$(jq -r '[.content[]? | select(.type=="text") | .text] | join("\n\n")' claude_response.json)"
-
-          if [ -n "${TEXT}" ]; then
-            echo "claude_ok=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "claude_text<<EOF"
-              echo "${TEXT}"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "claude_ok=false" >> "$GITHUB_OUTPUT"
-          {
-            echo "claude_error<<EOF"
-            echo "Respuesta 200 de Anthropic, pero sin bloques de texto en content."
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Comment in issue
-        if: steps.cfg.outputs.enabled == 'true'
-        uses: actions/github-script@v8
-        env:
-          CLAUDE_OK: ${{ steps.claude.outputs.claude_ok }}
-          CLAUDE_TEXT: ${{ steps.claude.outputs.claude_text }}
-          CLAUDE_ERROR: ${{ steps.claude.outputs.claude_error }}
-          CLAUDE_HTTP_STATUS: ${{ steps.claude.outputs.http_status }}
+        uses: actions/checkout@v4
         with:
-          script: |
-            const ok = process.env.CLAUDE_OK === 'true';
-            const text = (process.env.CLAUDE_TEXT || '').trim();
-            const error = (process.env.CLAUDE_ERROR || '').trim();
-            const status = (process.env.CLAUDE_HTTP_STATUS || '').trim();
+          fetch-depth: 1
 
-            const body = ok && text.length > 0
-              ? `## Claude Issue Worker\n\n${text}`
-              : [
-                  '## Claude Issue Worker',
-                  '',
-                  'No se pudo obtener respuesta de Claude.',
-                  status ? `HTTP status: \`${status}\`` : '',
-                  error ? `Error: \`${error}\`` : 'Revisa los logs del workflow para más detalle.',
-                ].join('\n');
+      - name: Run Claude Code
+        if: steps.cfg.outputs.enabled == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          prompt: |
+            Work on the GitHub issue using the issue body and any new issue comments as instructions.
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body,
-            });
+            Project constraints:
+            - This is a Django repository.
+            - Follow CLAUDE.md review and safety criteria.
+            - Keep changes minimal and focused.
+            - If the request is ambiguous, ask one concise clarifying question.
+
+            Safety rules:
+            - Do NOT merge.
+            - Do NOT push directly to main.
+            - Do NOT close issues automatically.
+            - If code changes are needed, propose them in a branch/PR flow.
