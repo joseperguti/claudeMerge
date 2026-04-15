@@ -8,16 +8,49 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write
+  actions: read
 
 # Required repository secrets:
 # - OPENAI_API_KEY: for Codex review job
+# - CLAUDE_CODE_OAUTH_TOKEN: for Claude review job
 #
 # Notes:
 # - This workflow only reviews and comments on PRs.
 # - It does NOT merge, approve, reject, push, or auto-fix code.
-# - Claude review is local-only (run in terminal before merge).
 
 jobs:
+  claude_review:
+    name: Claude · PR review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude PR Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          prompt: |
+            Review this pull request against main and leave actionable feedback.
+
+            Constraints:
+            - Do not merge, approve, reject, push, or auto-fix code.
+            - Focus on mismatch between PR description and actual diff.
+            - Prioritize sensitive paths: templates/**, templates/accounts/dashboard.html, accounts/**, mysite/**, scripts/**.
+            - Flag clear risks: dynamic innerHTML, unvalidated selectors/input-driven queries, bad conflict resolution, hidden functional changes inside visual refactors.
+
+            Output format:
+            1) Resumen real del cambio
+            2) Coincidencia entre PR y diff
+            3) Riesgos detectados
+            4) Ajustes sugeridos
+            5) Veredicto: OK / AJUSTAR / BLOQUEAR
+
   codex_review:
     name: Codex · PR review
     runs-on: ubuntu-latest
@@ -113,7 +146,7 @@ jobs:
             5) Veredicto: OK / AJUSTAR / BLOQUEAR
 
       - name: Comment in PR (Codex)
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           # TODO: verify exact output key exposed by openai/codex-action@v1.
           # If it differs from `response`, this step will publish a fallback message.
