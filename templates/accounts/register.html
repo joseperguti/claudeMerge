@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 
-{% block title %}Crear Cuenta{% endblock %}
+{% block title %}Crear Cuenta — Mi Sitio{% endblock %}
+{% block meta_description %}Crea tu cuenta en Mi Sitio y accede a las ofertas disponibles.{% endblock %}
+{% block og_title %}Crear Cuenta — Mi Sitio{% endblock %}
+{% block og_description %}Crea tu cuenta en Mi Sitio y accede a las ofertas disponibles.{% endblock %}
 
 {% block extra_styles %}
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -235,7 +238,7 @@ body { background: #0a0a0a; }
                             font-size="10" font-weight="700" fill="#6b7280"
                             font-family="-apple-system,sans-serif">0</text>
                     </svg>
-                    <span class="pwd-arcs-label" id="pwdLabel">Introduce una contrasena</span>
+                    <span class="pwd-arcs-label" id="pwdLabel">Introduce una contraseña</span>
                 </div>
                 {% endif %}
             </div>
@@ -253,7 +256,7 @@ body { background: #0a0a0a; }
         </form>
 
         <div class="auth-footer">
-            Ya tienes cuenta? <a href="{% url 'login' %}">Inicia sesion</a>
+            ¿Ya tienes cuenta? <a href="{% url 'login' %}">Inicia sesión</a>
         </div>
     </div>
 </div>
@@ -387,7 +390,7 @@ body { background: #0a0a0a; }
             const pct = sc * 25;
             pwdArc.style.strokeDashoffset = total - (total * pct / 100);
             const colors = ['#6b7280','#ff453a','#ff9f0a','#30d158','#a855f7'];
-            const lbls   = ['Introduce una contrasena','Muy debil','Debil','Buena','Fuerte'];
+            const lbls   = ['Introduce una contraseña','Muy débil','Débil','Buena','Fuerte'];
             pwdArc.style.stroke = colors[sc];
             pwdTxt.style.fill   = colors[sc];
             pwdTxt.textContent  = pct + '%';
