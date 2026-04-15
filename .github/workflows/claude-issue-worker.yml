@@ -65,6 +65,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          branch_prefix: feature/
+          branch_name_template: "{{prefix}}{{description}}-issue-{{entityNumber}}"
           # Run on issue events/comments without requiring "@claude"
           trigger_phrase: ""
           track_progress: true
