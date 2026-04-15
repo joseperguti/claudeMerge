@@ -167,6 +167,15 @@ body { background: var(--black); color: var(--white); }
 .fx-btn:hover { color: var(--white); border-color: #555; transform: translateY(-1px); }
 .fx-btn.active { color: var(--white); border-color: var(--purple2); box-shadow: 0 0 16px rgba(168,85,247,.26); }
 .selected-plan-indicator { font-size: 12px; color: var(--muted); border: 1px dashed var(--border); border-radius: 8px; padding: 8px 12px; }
+.billing-switch { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+.billing-btn { border: 0; background: transparent; color: var(--muted); border-radius: 999px; font-size: 12px; font-weight: 700; padding: 7px 14px; cursor: pointer; transition: background .2s, color .2s, transform .2s; }
+.billing-btn:hover { color: var(--white); transform: translateY(-1px); }
+.billing-btn.active { background: linear-gradient(135deg, rgba(124,58,237,.24), rgba(20,184,166,.24)); color: var(--white); }
+.billing-note { font-size: 12px; color: var(--teal2); border: 1px dashed rgba(20,184,166,.35); border-radius: 8px; padding: 8px 12px; }
+.plan-price-value { display: inline-block; transition: transform .2s ease, filter .2s ease; }
+.plan-price-value.price-pop { transform: scale(1.08); filter: drop-shadow(0 0 16px rgba(168,85,247,.4)); }
+.tab-progress { width: 100%; height: 4px; border-radius: 999px; border: 1px solid var(--border); background: rgba(255,255,255,.02); margin: 0 0 18px; overflow: hidden; }
+.tab-progress > span { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--purple), var(--teal2)); transition: width .08s linear; }
 
 .toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
 .toast {
@@ -190,6 +199,7 @@ body { background: var(--black); color: var(--white); }
 @media (max-width: 900px) {
     .fx-toolbar { margin-top: -6px; }
     .selected-plan-indicator { width: 100%; }
+    .billing-note { width: 100%; }
 }
 {% endblock %}
 
@@ -207,10 +217,16 @@ body { background: var(--black); color: var(--white); }
         <a href="?tab=oferta1" class="tab-btn {% if tab == 'oferta1' %}active{% endif %}" data-tab-link="oferta1" role="tab" aria-selected="{% if tab == 'oferta1' %}true{% else %}false{% endif %}">Plan Premium</a>
         <a href="?tab=oferta2" class="tab-btn {% if tab == 'oferta2' %}active{% endif %}" data-tab-link="oferta2" role="tab" aria-selected="{% if tab == 'oferta2' %}true{% else %}false{% endif %}">Plan Avanzado</a>
     </nav>
+    <div class="tab-progress" aria-hidden="true"><span data-tab-progress></span></div>
 
     <div class="fx-toolbar">
         <button type="button" class="fx-btn" data-fx-toggle="pause">Pausar efectos</button>
         <button type="button" class="fx-btn" data-fx-toggle="reduced">Modo suave</button>
+        <div class="billing-switch" role="group" aria-label="Ciclo de facturacion">
+            <button type="button" class="billing-btn" data-billing-mode="monthly">Mensual</button>
+            <button type="button" class="billing-btn" data-billing-mode="yearly">Anual (ahorra 20%)</button>
+        </div>
+        <div class="billing-note" data-billing-note>Facturacion mensual activa.</div>
         <div class="selected-plan-indicator" data-selected-plan>No has seleccionado un plan aun.</div>
     </div>
 
@@ -223,9 +239,9 @@ body { background: var(--black); color: var(--white); }
             <p class="sub">El plan Premium te da acceso completo a todas las herramientas que necesitas para crecer mas rapido y con menos esfuerzo.</p>
             <div class="price-block">
                 <span class="currency">$</span>
-                <span class="amount">49</span>
+                <span class="amount plan-price-value" data-plan-price="premium" data-monthly="49" data-yearly="39">49</span>
             </div>
-            <p class="price-period">por mes &middot; facturado anualmente &middot; cancela cuando quieras</p>
+            <p class="price-period" data-plan-period="premium">por mes &middot; cancela cuando quieras</p>
             <a href="#" class="btn-primary-1" data-cta-plan="premium">Contratar ahora</a>
             <a href="#" class="btn-ghost">Ver demo</a>
         </div>
@@ -289,8 +305,8 @@ body { background: var(--black); color: var(--white); }
 
             <div class="pricing-card">
                 <div class="label">Plan Avanzado</div>
-                <div class="big-price"><sup>$</sup>99</div>
-                <p class="per">por mes &middot; hasta 10 usuarios</p>
+                <div class="big-price"><sup>$</sup><span class="plan-price-value" data-plan-price="avanzado" data-monthly="99" data-yearly="79">99</span></div>
+                <p class="per" data-plan-period="avanzado">por mes &middot; hasta 10 usuarios</p>
                 <hr class="divider">
                 <ul class="plan-includes">
                     <li><span class="tick">&#10003;</span> Todo lo del Plan Premium</li>
@@ -351,13 +367,15 @@ body { background: var(--black); color: var(--white); }
     const STORAGE_KEYS = {
         tab: 'dashboard.activeTab',
         plan: 'dashboard.selectedPlan',
-        reduced: 'dashboard.effects.reduced'
+        reduced: 'dashboard.effects.reduced',
+        billing: 'dashboard.billing.mode'
     };
 
     const state = {
         paused: false,
         reduced: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-        visible: document.visibilityState === 'visible'
+        visible: document.visibilityState === 'visible',
+        billing: 'monthly'
     };
 
     const tabs = Array.from(document.querySelectorAll('[data-tab-link]'));
@@ -365,6 +383,11 @@ body { background: var(--black); color: var(--white); }
     const pauseBtn = document.querySelector('[data-fx-toggle="pause"]');
     const reducedBtn = document.querySelector('[data-fx-toggle="reduced"]');
     const planIndicator = document.querySelector('[data-selected-plan]');
+    const billingButtons = Array.from(document.querySelectorAll('[data-billing-mode]'));
+    const billingNote = document.querySelector('[data-billing-note]');
+    const planPriceEls = Array.from(document.querySelectorAll('[data-plan-price]'));
+    const planPeriodEls = Array.from(document.querySelectorAll('[data-plan-period]'));
+    const tabProgressBar = document.querySelector('[data-tab-progress]');
     const toastStack = document.getElementById('toastStack');
     const pointerFine = window.matchMedia('(pointer:fine)').matches;
 
@@ -392,6 +415,10 @@ body { background: var(--black); color: var(--white); }
 
     function shouldRunFx() {
         return !state.paused && !state.reduced && state.visible;
+    }
+
+    function shouldAutoRotateTabs() {
+        return shouldRunFx() && tabs.length > 1;
     }
 
     function updateIndicator() {
@@ -427,10 +454,95 @@ body { background: var(--black); color: var(--white); }
         if (reducedBtn) reducedBtn.classList.toggle('active', state.reduced);
     }
 
+    function updateBillingUI() {
+        billingButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.billingMode === state.billing);
+        });
+        if (billingNote) {
+            billingNote.textContent = state.billing === 'yearly'
+                ? 'Facturacion anual activa. Ahorras un 20% en ambos planes.'
+                : 'Facturacion mensual activa.';
+        }
+    }
+
+    function updatePlanPricing(showToastFeedback) {
+        const yearly = state.billing === 'yearly';
+        planPriceEls.forEach(el => {
+            const nextValue = yearly ? el.dataset.yearly : el.dataset.monthly;
+            if (!nextValue || el.textContent === nextValue) return;
+            el.textContent = nextValue;
+            el.classList.add('price-pop');
+            setTimeout(() => el.classList.remove('price-pop'), 240);
+        });
+
+        planPeriodEls.forEach(el => {
+            const plan = el.dataset.planPeriod;
+            if (plan === 'premium') {
+                el.innerHTML = yearly
+                    ? 'por mes &middot; facturado anualmente &middot; cancela cuando quieras'
+                    : 'por mes &middot; cancela cuando quieras';
+            } else if (plan === 'avanzado') {
+                el.innerHTML = yearly
+                    ? 'por mes &middot; facturado anual &middot; hasta 10 usuarios'
+                    : 'por mes &middot; hasta 10 usuarios';
+            }
+        });
+
+        if (showToastFeedback) {
+            showToast(
+                'Facturacion',
+                yearly ? 'Modo anual activado con descuento aplicado.' : 'Modo mensual reactivado.'
+            );
+        }
+    }
+
     function setCanvasSize() {
         if (!tc) return;
         tc.width = window.innerWidth;
         tc.height = window.innerHeight;
+    }
+
+    let rotateTimer = null;
+    let rotateStartedAt = 0;
+    const rotateDurationMs = 9000;
+
+    function clearRotateTimer() {
+        if (rotateTimer) {
+            clearTimeout(rotateTimer);
+            rotateTimer = null;
+        }
+    }
+
+    function setTabProgress(percentage) {
+        if (!tabProgressBar) return;
+        tabProgressBar.style.width = Math.max(0, Math.min(100, percentage)) + '%';
+    }
+
+    function tickProgress() {
+        if (!shouldAutoRotateTabs()) {
+            setTabProgress(0);
+            requestAnimationFrame(tickProgress);
+            return;
+        }
+        const elapsed = performance.now() - rotateStartedAt;
+        setTabProgress((elapsed / rotateDurationMs) * 100);
+        requestAnimationFrame(tickProgress);
+    }
+
+    function scheduleRotateFromActiveTab() {
+        clearRotateTimer();
+        setTabProgress(0);
+        if (!shouldAutoRotateTabs()) return;
+        rotateStartedAt = performance.now();
+        rotateTimer = setTimeout(() => {
+            const current = document.querySelector('.tab-content.active');
+            const currentTab = current ? current.dataset.tab : 'oferta1';
+            const idx = tabs.findIndex(btn => btn.dataset.tabLink === currentTab);
+            const nextBtn = tabs[(idx + 1) % tabs.length];
+            if (nextBtn) {
+                switchTab(nextBtn.dataset.tabLink, { pushHistory: true, animate: true });
+            }
+        }, rotateDurationMs);
     }
 
     function animateTrail() {
@@ -663,6 +775,7 @@ body { background: var(--black); color: var(--white); }
 
         saveStorage(STORAGE_KEYS.tab, tab);
         if (opts.pushHistory !== false) history.pushState({}, '', '?tab=' + tab);
+        scheduleRotateFromActiveTab();
     }
 
     tabs.forEach(btn => {
@@ -707,6 +820,7 @@ body { background: var(--black); color: var(--white); }
 
     document.addEventListener('visibilitychange', () => {
         state.visible = document.visibilityState === 'visible';
+        scheduleRotateFromActiveTab();
     });
 
     if (pauseBtn) {
@@ -714,6 +828,7 @@ body { background: var(--black); color: var(--white); }
             state.paused = !state.paused;
             updateFxButtons();
             showToast('Efectos', state.paused ? 'Animaciones pausadas.' : 'Animaciones reactivadas.');
+            scheduleRotateFromActiveTab();
         });
     }
 
@@ -730,8 +845,28 @@ body { background: var(--black); color: var(--white); }
                 animate: false,
                 force: true
             });
+            scheduleRotateFromActiveTab();
         });
     }
+
+    const storedBilling = readStorage(STORAGE_KEYS.billing);
+    if (storedBilling === 'monthly' || storedBilling === 'yearly') {
+        state.billing = storedBilling;
+    }
+    updateBillingUI();
+    updatePlanPricing(false);
+
+    billingButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.dataset.billingMode;
+            if (mode !== 'monthly' && mode !== 'yearly') return;
+            if (mode === state.billing) return;
+            state.billing = mode;
+            saveStorage(STORAGE_KEYS.billing, mode);
+            updateBillingUI();
+            updatePlanPricing(true);
+        });
+    });
 
     document.querySelectorAll('[data-cta-plan]').forEach(btn => {
         btn.addEventListener('click', e => {
@@ -773,8 +908,21 @@ body { background: var(--black); color: var(--white); }
     });
 
     window.addEventListener('resize', setCanvasSize);
+    document.addEventListener('keydown', e => {
+        if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
+        if (e.key === '1') switchTab('oferta1', { pushHistory: true, animate: true });
+        if (e.key === '2') switchTab('oferta2', { pushHistory: true, animate: true });
+        if (e.key.toLowerCase() === 'b') {
+            state.billing = state.billing === 'monthly' ? 'yearly' : 'monthly';
+            saveStorage(STORAGE_KEYS.billing, state.billing);
+            updateBillingUI();
+            updatePlanPricing(true);
+        }
+    });
+
     setCanvasSize();
     animateTrail();
+    tickProgress();
     updateIndicator();
     updateFxButtons();
 
